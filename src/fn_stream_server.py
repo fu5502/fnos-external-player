@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-import os, sys, sqlite3, mimetypes, urllib.parse, time, json
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import requests
+import os, sys, sqlite3, mimetypes, urllib.parse
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 DB_PATH = '/usr/local/apps/@appdata/trim.media/database/trimmedia.db'
-
-# 内存缓存已解析的最终云端直链 { file_path: (resolved_url, expire_time) }
-strm_cache = {}
 
 def get_media_info(guid):
     try:
@@ -27,39 +23,10 @@ def get_media_info(guid):
         print(f"DB Error: {e}")
     return None, None
 
-def resolve_strm_target(file_path):
-    now = time.time()
-    if file_path in strm_cache:
-        cached_url, expire = strm_cache[file_path]
-        if now < expire:
-            return cached_url
-
-    try:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            strm_url = f.read().strip()
-
-        if strm_url.startswith(('http://', 'https://')):
-            try:
-                r = requests.get(strm_url, allow_redirects=False, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
-                if r.status_code in (301, 302, 303, 307, 308) and r.headers.get('Location'):
-                    final_url = r.headers.get('Location')
-                else:
-                    final_url = strm_url
-            except Exception:
-                final_url = strm_url
-            
-            strm_cache[file_path] = (final_url, now + 7200) # 缓存2小时
-            return final_url
-        elif os.path.exists(strm_url):
-            return strm_url
-    except Exception as e:
-        print(f"Resolve error: {e}")
-
-    return None
-
 class StreamHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
+        self.send_header('Content-Length', '0')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', '*')
@@ -79,37 +46,6 @@ class StreamHandler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
 
-        # 1. 前端直链解析 API: /fnresolve/{guid}
-        if parts[0] == 'fnresolve' and len(parts) >= 2:
-            guid = parts[1]
-            file_path, item_guid = get_media_info(guid)
-            if not file_path:
-                self.send_response(404)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(json.dumps({'code': -1, 'msg': 'Not found'}).encode('utf-8'))
-                return
-
-            if file_path.lower().endswith('.strm'):
-                final_url = resolve_strm_target(file_path)
-                data = {'code': 0, 'url': final_url, 'type': 'strm', 'file': os.path.basename(file_path)}
-            else:
-                host = self.headers.get("Host", "127.0.0.1:5668")
-                local_url = f"http://{host}/fnplay/{guid}/video.mp4"
-                data = {'code': 0, 'url': local_url, 'type': 'local', 'file': os.path.basename(file_path)}
-
-            resp_bytes = json.dumps(data).encode('utf-8')
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(resp_bytes)))
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            if send_body:
-                self.wfile.write(resp_bytes)
-            return
-
-        # 2. 媒体流服务: /fnplay/{guid}/...
         if parts[0] == 'fnplay' and len(parts) >= 2:
             guid = parts[1]
             file_path, item_guid = get_media_info(guid)
@@ -117,17 +53,25 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.send_error(404, "Media file not found on disk")
                 return
 
+            # 如果是 .strm 文件：0 毫秒即时 302 重定向到 OpenList 原生链接！
             if file_path.lower().endswith('.strm'):
-                target_url = resolve_strm_target(file_path)
-                if target_url and target_url.startswith(('http://', 'https://')):
-                    self.send_response(302)
-                    self.send_header('Location', target_url)
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.end_headers()
-                    return
-                elif target_url and os.path.exists(target_url):
-                    file_path = target_url
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        strm_url = f.read().strip()
+                    if strm_url.startswith(('http://', 'https://', 'ftp://', 'smb://')):
+                        self.send_response(302)
+                        self.send_header('Location', strm_url)
+                        self.send_header('Content-Length', '0')
+                        self.send_header('Connection', 'close')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        return
+                    elif os.path.exists(strm_url):
+                        file_path = strm_url
+                except Exception as e:
+                    print(f"Error reading strm: {e}")
 
+            # 本地文件多线程高速并发 HTTP 206 流式传输
             try:
                 file_size = os.path.getsize(file_path)
                 content_type, _ = mimetypes.guess_type(file_path)
@@ -143,6 +87,8 @@ class StreamHandler(BaseHTTPRequestHandler):
                     if start >= file_size or end >= file_size:
                         self.send_response(416)
                         self.send_header('Content-Range', f'bytes */{file_size}')
+                        self.send_header('Content-Length', '0')
+                        self.send_header('Connection', 'close')
                         self.end_headers()
                         return
                     length = end - start + 1
@@ -159,7 +105,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                             f.seek(start)
                             remaining = length
                             while remaining > 0:
-                                chunk_size = min(remaining, 128 * 1024)
+                                chunk_size = min(remaining, 256 * 1024)
                                 data = f.read(chunk_size)
                                 if not data:
                                     break
@@ -176,7 +122,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                     if send_body:
                         with open(file_path, 'rb') as f:
                             while True:
-                                data = f.read(128 * 1024)
+                                data = f.read(256 * 1024)
                                 if not data:
                                     break
                                 self.wfile.write(data)
@@ -190,6 +136,6 @@ class StreamHandler(BaseHTTPRequestHandler):
         pass
 
 if __name__ == '__main__':
-    server = HTTPServer(('0.0.0.0', 5668), StreamHandler)
+    server = ThreadingHTTPServer(('0.0.0.0', 5668), StreamHandler)
     print("fnplay stream server listening on 0.0.0.0:5668...")
     server.serve_forever()
