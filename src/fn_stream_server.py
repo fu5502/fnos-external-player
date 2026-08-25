@@ -23,6 +23,12 @@ def get_media_info(guid):
         print(f"DB Error: {e}")
     return None, None
 
+def safe_quote_url(url):
+    parts = urllib.parse.urlsplit(url)
+    quoted_path = urllib.parse.quote(urllib.parse.unquote(parts.path), safe='/:')
+    quoted_query = urllib.parse.quote(urllib.parse.unquote(parts.query), safe='=&/:?%+') if parts.query else ''
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, quoted_path, quoted_query, parts.fragment))
+
 class StreamHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
@@ -53,14 +59,15 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.send_error(404, "Media file not found on disk")
                 return
 
-            # 如果是 .strm 文件：0 毫秒即时 302 重定向到 OpenList 原生链接！
+            # 如果是 .strm 文件：安全 URL 编码后即时 302 重定向到 OpenList 原生链接！
             if file_path.lower().endswith('.strm'):
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         strm_url = f.read().strip()
                     if strm_url.startswith(('http://', 'https://', 'ftp://', 'smb://')):
+                        encoded_url = safe_quote_url(strm_url)
                         self.send_response(302)
-                        self.send_header('Location', strm_url)
+                        self.send_header('Location', encoded_url)
                         self.send_header('Content-Length', '0')
                         self.send_header('Connection', 'close')
                         self.send_header('Access-Control-Allow-Origin', '*')
