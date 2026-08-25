@@ -1,14 +1,13 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v4.2 (全场景原生片名版)
- * 1. 深度片名/单集/番外识别：支持番外篇、未刮削剧集、分集卡片与面包屑，精准展示真实影视名称！
- * 2. 原生纯净中文字符：PotPlayer / VLC 标题栏和播放列表中直接显示纯中文，杜绝 %E9%... 乱码
- * 3. 100% 同步 0ms 极速唤起：对标 OpenList 原生直出体验
- * 4. 独家 Direct Stream 网关（端口 5668）+ RFC 3986 安全重定向，兼容本地高码率原盘与云盘 STRM
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v4.3 (权威原生片名版)
+ * 1. 彻底解决“首页.mkv”等 DOM 抓取错误：交由 Direct Stream 网关从 SQLite 底层数据库与 OpenList 原生返回 100% 精准影视/单集原名！
+ * 2. 100% 同步 0ms 极速唤起：对标 OpenList 原生直出体验
+ * 3. 独家 Direct Stream 网关（端口 5668）+ RFC 3986 安全重定向，兼容本地高码率原盘与云盘 STRM
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.2 (Universal Title Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.3 (Authoritative Title Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     function getOS() {
         const u = navigator.userAgent;
@@ -18,62 +17,6 @@
         if (/android/i.test(u)) return 'android';
         if (/linux/i.test(u)) return 'linux';
         return 'other';
-    }
-
-    function getPageTitle() {
-        let title = '';
-
-        // 1. 从当前激活/选中的剧集或分集卡片提取
-        const activeEp = document.querySelector('[class*="active"] [class*="title"], [class*="selected"] [class*="title"], [class*="active"][class*="item"], [class*="current"] [class*="title"], [class*="episode-active"]');
-        if (activeEp && activeEp.innerText && activeEp.innerText.trim().length > 0 && activeEp.innerText.trim().length < 80) {
-            title = activeEp.innerText.trim();
-        }
-
-        // 2. 从页面主标题或单集标题元素提取
-        if (!title) {
-            const titleEls = Array.from(document.querySelectorAll('[class*="episode-title"], [class*="episodeTitle"], [class*="video-title"], [class*="film-title"], h1, h2, h3, [class*="title--"], [class*="name--"]'));
-            for (const el of titleEls) {
-                const txt = (el.innerText || '').trim();
-                if (txt && txt.length > 0 && txt.length < 80 && !txt.includes('外部播放器') && !txt.includes('继续播放')) {
-                    title = txt;
-                    break;
-                }
-            }
-        }
-
-        // 3. 从面包屑导航提取（通常包含具体剧集名或番外名）
-        if (!title) {
-            const breadcrumbs = Array.from(document.querySelectorAll('.semi-breadcrumb-item, [class*="breadcrumb-item"], [class*="breadcrumb"] a, [class*="breadcrumb"] span'));
-            if (breadcrumbs.length > 0) {
-                const lastBc = breadcrumbs[breadcrumbs.length - 1];
-                if (lastBc && lastBc.innerText && lastBc.innerText.trim()) {
-                    title = lastBc.innerText.trim();
-                }
-            }
-        }
-
-        // 4. 从 document.title 提取
-        if (!title && document.title) {
-            const cleanDocTitle = document.title
-                .replace(/\s*[-_]\s*飞牛影视.*/, '')
-                .replace(/\s*[-_]\s*fnOS.*/i, '')
-                .replace(/\s*[-_]\s*飞牛.*/, '')
-                .trim();
-            if (cleanDocTitle && cleanDocTitle !== '飞牛' && cleanDocTitle !== '飞牛影视') {
-                title = cleanDocTitle;
-            }
-        }
-
-        // 移除非法字符，保留原生中文字符
-        if (title) {
-            title = title.replace(/[\\/:*?"<>|\r\n\t]/g, '_').trim();
-            if (!title.toLowerCase().endsWith('.mkv') && !title.toLowerCase().endsWith('.mp4')) {
-                title += '.mkv';
-            }
-            return title;
-        }
-
-        return '';
     }
 
     function extractCurrentGuid() {
@@ -98,15 +41,11 @@
         }, 1000);
     }
 
-    // 同步生成原生中文字符的直链地址
+    // 由服务端网关精准提供 100% 真实片名重定向
     function getInstantStreamUrl() {
         const guid = extractCurrentGuid();
         if (!guid) return null;
-        const fileName = getPageTitle();
-        if (fileName) {
-            return `${window.location.protocol}//${window.location.hostname}:5668/fnplay/${guid}/${fileName}`;
-        }
-        return `${window.location.protocol}//${window.location.hostname}:5668/fnplay/${guid}/`;
+        return `${window.location.protocol}//${window.location.hostname}:5668/fnplay/${guid}`;
     }
 
     const Players = [
@@ -137,8 +76,7 @@
                 const os = getOS();
                 let vlcUrl = `vlc://${streamUrl}`;
                 if (os === 'android') {
-                    const title = getPageTitle();
-                    vlcUrl = `intent:${streamUrl}#Intent;package=org.videolan.vlc;type=video/*;S.title=${title};end`;
+                    vlcUrl = `intent:${streamUrl}#Intent;package=org.videolan.vlc;type=video/*;end`;
                 } else if (os === 'ios') {
                     vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(streamUrl)}`;
                 }
@@ -201,8 +139,7 @@
                 const streamUrl = getInstantStreamUrl();
                 if (!streamUrl) return;
                 const os = getOS();
-                const title = getPageTitle();
-                let ddUrl = `ddplay:${encodeURIComponent(streamUrl + '|filePath=' + title)}`;
+                let ddUrl = `ddplay:${encodeURIComponent(streamUrl)}`;
                 if (os === 'android') {
                     ddUrl = `intent:${encodeURI(streamUrl)}#Intent;package=com.xyoye.dandanplay;type=video/*;end`;
                 }
@@ -247,7 +184,7 @@
                 const streamUrl = getInstantStreamUrl();
                 if (!streamUrl) return;
                 copyToClipboard(streamUrl, () => {
-                    showToast('已复制无损直链到剪贴板！');
+                    showToast('已复制直链到剪贴板！');
                 });
             }
         }
