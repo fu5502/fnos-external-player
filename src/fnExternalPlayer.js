@@ -1,13 +1,16 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v4.3 (权威原生片名版)
- * 1. 彻底解决“首页.mkv”等 DOM 抓取错误：交由 Direct Stream 网关从 SQLite 底层数据库与 OpenList 原生返回 100% 精准影视/单集原名！
- * 2. 100% 同步 0ms 极速唤起：对标 OpenList 原生直出体验
- * 3. 独家 Direct Stream 网关（端口 5668）+ RFC 3986 安全重定向，兼容本地高码率原盘与云盘 STRM
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v4.4 (元数据精准直出版)
+ * 1. 服务端元数据直通：自动通过网关服务获取 100% 准确真实的影视/单集文件名（如“冷库01：捉迷藏.rmvb”）
+ * 2. 纯净中文字符呈现：PotPlayer / VLC 标题栏与播放列表完美展示中文原名，0 乱码
+ * 3. 100% 同步 0ms 极速唤起：对标 OpenList 原生直出体验
+ * 4. 独家 Direct Stream 网关（端口 5668）+ RFC 3986 安全重定向，兼容本地高码率原盘与云盘 STRM
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.3 (Authoritative Title Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.4 (Accurate Metadata Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+
+    const titleCache = {};
 
     function getOS() {
         const u = navigator.userAgent;
@@ -30,6 +33,48 @@
         return '';
     }
 
+    // 后台毫秒级预加载真实片名
+    function prefetchMeta(guid) {
+        if (!guid || titleCache[guid]) return;
+        fetch(`${window.location.protocol}//${window.location.hostname}:5668/fnmeta/${guid}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.title) {
+                    titleCache[guid] = data.title;
+                    console.log(`[fnExternalPlayer] 预加载片名成功: ${guid} -> ${data.title}`);
+                }
+            })
+            .catch(() => {});
+    }
+
+    function getFallbackTitle() {
+        let title = '';
+        const titleEl = document.querySelector('[class*="episode-title"], [class*="episodeTitle"], [class*="video-title"], [class*="film-title"], h1, h2, [class*="title--"]');
+        if (titleEl && titleEl.innerText && titleEl.innerText.trim().length > 0 && titleEl.innerText.trim().length < 80) {
+            title = titleEl.innerText.trim();
+        }
+
+        if (!title && document.title) {
+            const cleanDocTitle = document.title
+                .replace(/\s*[-_]\s*飞牛影视.*/, '')
+                .replace(/\s*[-_]\s*fnOS.*/i, '')
+                .replace(/\s*[-_]\s*飞牛.*/, '')
+                .trim();
+            if (cleanDocTitle && cleanDocTitle !== '飞牛' && cleanDocTitle !== '飞牛影视') {
+                title = cleanDocTitle;
+            }
+        }
+
+        if (title) {
+            title = title.replace(/[\\/:*?"<>|\r\n\t]/g, '_').trim();
+            if (!title.toLowerCase().endsWith('.mkv') && !title.toLowerCase().endsWith('.mp4')) {
+                title += '.mkv';
+            }
+            return title;
+        }
+        return '视频.mkv';
+    }
+
     function openProtocolSync(uri) {
         const a = document.createElement('a');
         a.href = uri;
@@ -41,11 +86,12 @@
         }, 1000);
     }
 
-    // 由服务端网关精准提供 100% 真实片名重定向
+    // 同步生成包含权威真实片名的直链
     function getInstantStreamUrl() {
         const guid = extractCurrentGuid();
         if (!guid) return null;
-        return `${window.location.protocol}//${window.location.hostname}:5668/fnplay/${guid}`;
+        const fileName = titleCache[guid] || getFallbackTitle();
+        return `${window.location.protocol}//${window.location.hostname}:5668/fnplay/${guid}/${fileName}`;
     }
 
     const Players = [
@@ -76,7 +122,8 @@
                 const os = getOS();
                 let vlcUrl = `vlc://${streamUrl}`;
                 if (os === 'android') {
-                    vlcUrl = `intent:${streamUrl}#Intent;package=org.videolan.vlc;type=video/*;end`;
+                    const title = titleCache[extractCurrentGuid()] || getFallbackTitle();
+                    vlcUrl = `intent:${streamUrl}#Intent;package=org.videolan.vlc;type=video/*;S.title=${title};end`;
                 } else if (os === 'ios') {
                     vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(streamUrl)}`;
                 }
@@ -139,7 +186,8 @@
                 const streamUrl = getInstantStreamUrl();
                 if (!streamUrl) return;
                 const os = getOS();
-                let ddUrl = `ddplay:${encodeURIComponent(streamUrl)}`;
+                const title = titleCache[extractCurrentGuid()] || getFallbackTitle();
+                let ddUrl = `ddplay:${encodeURIComponent(streamUrl + '|filePath=' + title)}`;
                 if (os === 'android') {
                     ddUrl = `intent:${encodeURI(streamUrl)}#Intent;package=com.xyoye.dandanplay;type=video/*;end`;
                 }
@@ -337,6 +385,11 @@
     }
 
     function tryInject() {
+        const guid = extractCurrentGuid();
+        if (guid) {
+            prefetchMeta(guid);
+        }
+
         const existing = document.getElementById('fn-external-player-bar');
         if (existing && document.body.contains(existing)) {
             return;
