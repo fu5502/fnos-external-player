@@ -1,6 +1,6 @@
 ﻿# 飞牛影视 (fnOS) 全能外部播放器调用插件 🚀
 
-为 **飞牛 OS (fnOS) 飞牛影视 (`trim.media`)** 打造的服务端免插件注入工具。支持一键唤起 **PotPlayer、VLC、IINA、Infuse、MPV、弹弹Play、NPlayer、恒星播放器** 等全套主流播放器，支持 4K 蓝光原画无损秒播、OpenList / AList / STRM 极速预解析与历史进度断点续播！
+为 **飞牛 OS (fnOS) 飞牛影视 (`trim.media`)** 打造的服务端免插件注入工具。支持一键唤起 **PotPlayer、VLC、IINA、Infuse、MPV、弹弹Play、NPlayer、恒星播放器** 等全套主流播放器，支持 4K 蓝光原画无损秒播、OpenList / AList / STRM 极速预解析、权威真实中文片名识别与历史断点续播！
 
 ---
 
@@ -16,6 +16,9 @@
 * ⚡ **OpenList / AList 级别极致秒播体验**：
   * **0 毫秒同步即时响应**：去除点击时的异步网络延迟，点击按钮瞬间（0ms）直接触发协议唤起，与在 OpenList / AList 网页中点击播放体验完全一致！
   * **0.07 秒极速 302 直连**：对于 Alist / OpenList / 天翼云盘 / 115 / 夸克 / 阿里云盘 生成的 `.strm` 文件，毫秒级 302 重定向到原生直链，直接与网盘/OpenList 建立原生高速直连，**跑满千兆宽带秒开**！
+* 🏷️ **权威真实中文片名识别**：
+  * 内置 `/fnmeta` 毫秒级元数据直通接口，自动从底层数据库和 STRM 文件中提取真实的电影/剧集/番外篇中文原名（如 `冷库01：捉迷藏.rmvb`、`誓言.mp4`、`怒之杀 (2026).mp4`）；
+  * PotPlayer / VLC 播放列表和窗口标题栏**100% 精准显示纯中文原名**，杜绝 `%E9%...` 乱码与占位符；
 * 🔥 **多线程并发推流网关（端口 `5668`）**：采用多线程高并发架构，针对 PotPlayer 打开 4K 蓝光影片时的 10~20 个分块探测请求瞬间并行响应，**0% 转码 CPU 占用，毫秒级拖动快进**；
 * ⏱ **历史进度自动续播**：自动同步你在飞牛影视上次的观影历史，调起播放器时自动附带 `/seek=hh:mm:ss` 从断点处无缝续播；
 * 🛡 **系统升级防失效**：配置 systemd 常驻守护及 Cron 定时校验，fnOS 或飞牛影视升级后自动恢复注入，无需重新配置；
@@ -49,9 +52,10 @@ curl -sSL https://raw.githubusercontent.com/fu5502/fnos-external-player/main/uni
 
 ```text
 [ 浏览器 (飞牛影视 Web) ]
-       │ (点击 ▶ PotPlayer / VLC / IINA / Infuse)
-       ▼ (0ms 同步即时触发)
-[ fnExternalPlayer.js (前端注入) ] ── (自动提取历史断点 /seek=00:18:45)
+       │ (进入页面毫秒级静默预加载片名 /fnmeta/:guid)
+       │ (点击 ▶ PotPlayer / VLC / IINA / Infuse -> 0ms 同步即时触发)
+       ▼
+[ fnExternalPlayer.js (前端注入) ] ── (携带真实中文片名与历史断点 /seek=00:18:45)
        │
        ▼
 [ Direct Stream 多线程网关服务 (:5668) ] ── (查询 trimmedia.db 定位底层文件)
