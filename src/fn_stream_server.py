@@ -8,20 +8,35 @@ def get_media_info(guid):
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        
+        real_name = None
+        # 1. 优先从 item 表获取准确的标题或文件名
+        c.execute("SELECT title, filename, path FROM item WHERE guid = ?", (guid,))
+        r = c.fetchone()
+        if r:
+            title, filename, path = r
+            candidate = title if (title and title.strip()) else filename
+            if candidate:
+                real_name = os.path.splitext(candidate)[0]
+
+        # 2. 查 item_media by guid
         c.execute("SELECT path, item_guid FROM item_media WHERE guid = ?", (guid,))
         r = c.fetchone()
         if r and r[0] and os.path.exists(r[0]):
             conn.close()
-            return r[0], r[1]
+            return r[0], r[1], real_name
+
+        # 3. 查 item_media by item_guid
         c.execute("SELECT path, item_guid FROM item_media WHERE item_guid = ? ORDER BY sort_num ASC, size DESC", (guid,))
         r = c.fetchone()
         if r and r[0] and os.path.exists(r[0]):
             conn.close()
-            return r[0], r[1]
+            return r[0], r[1], real_name
+
         conn.close()
     except Exception as e:
         print(f"DB Error: {e}")
-    return None, None
+    return None, None, None
 
 def safe_quote_url(url):
     parts = urllib.parse.urlsplit(url)
@@ -54,9 +69,22 @@ class StreamHandler(BaseHTTPRequestHandler):
 
         if parts[0] == 'fnplay' and len(parts) >= 2:
             guid = parts[1]
-            file_path, item_guid = get_media_info(guid)
+            file_path, item_guid, real_name = get_media_info(guid)
             if not file_path or not os.path.exists(file_path):
                 self.send_error(404, "Media file not found on disk")
+                return
+
+            # 如果请求没有携带具体文件名（如 /fnplay/{guid}/），自动 302 重定向到带真实片名的 URL
+            if len(parts) == 2 and not file_path.lower().endswith('.strm'):
+                display_name = real_name or os.path.splitext(os.path.basename(file_path))[0] or "video"
+                ext = os.path.splitext(file_path)[1] or ".mkv"
+                target_url = f"/fnplay/{guid}/{urllib.parse.quote(display_name + ext)}"
+                self.send_response(302)
+                self.send_header('Location', target_url)
+                self.send_header('Content-Length', '0')
+                self.send_header('Connection', 'close')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
                 return
 
             # 如果是 .strm 文件：安全 URL 编码后即时 302 重定向到 OpenList 原生链接！
