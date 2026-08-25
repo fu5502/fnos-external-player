@@ -1,13 +1,13 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v3.9 (OpenList 极速秒开版)
- * 1. 100% 同步即时响应：点击瞬间 0 毫秒调起播放器，享受 OpenList / AList 级别极致秒开体验！
- * 2. 独家 Direct Stream 网关服务（端口 5668），免 Token 鉴权、原生无损流直连
- * 3. 完美兼容 STRM 云端流与本地大盘：服务端 302 高速重定向，杜绝参数截断
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v4.0 (智能片名展示版)
+ * 1. 动态智能片名识别：在 PotPlayer、VLC、IINA 等播放器标题栏和播放列表中完美展示真实影视/单集名称！
+ * 2. 100% 同步 0ms 极速唤起：对标 OpenList 原生直出体验
+ * 3. 独家 Direct Stream 网关（端口 5668）+ RFC 3986 安全重定向，兼容本地高码率原盘与云盘 STRM
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v3.9 (OpenList Instant Mode) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.0 (Smart Title Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     function getOS() {
         const u = navigator.userAgent;
@@ -20,11 +20,33 @@
     }
 
     function getPageTitle() {
-        const titleEl = document.querySelector('h1, h2, .film-title, [class*="title--"], [class*="name--"]');
-        if (titleEl && titleEl.innerText.trim()) {
-            return titleEl.innerText.trim();
+        let title = '';
+        
+        // 1. 尝试从页面主标题或单集标题元素提取
+        const titleEl = document.querySelector('[class*="episode-title"], [class*="episodeTitle"], [class*="video-title"], h1, h2, .film-title, [class*="title--"], [class*="name--"]');
+        if (titleEl && titleEl.innerText && titleEl.innerText.trim().length > 0 && titleEl.innerText.trim().length < 80) {
+            title = titleEl.innerText.trim();
         }
-        return document.title ? document.title.replace(/ - 飞牛影视.*/, '').trim() : '飞牛视频';
+
+        // 2. 如果没找到，从 document.title 提取
+        if (!title && document.title) {
+            title = document.title
+                .replace(/\s*[-_]\s*飞牛影视.*/, '')
+                .replace(/\s*[-_]\s*fnOS.*/i, '')
+                .replace(/\s*[-_]\s*飞牛.*/, '')
+                .trim();
+        }
+
+        if (!title || title === '飞牛' || title === '飞牛影视') {
+            title = '飞牛视频';
+        }
+
+        // 移除非法文件名字符
+        title = title.replace(/[\\/:*?"<>|\r\n\t]/g, '_').trim();
+        if (!title.toLowerCase().endsWith('.mkv') && !title.toLowerCase().endsWith('.mp4')) {
+            title += '.mkv';
+        }
+        return title;
     }
 
     function extractCurrentGuid() {
@@ -38,7 +60,6 @@
         return '';
     }
 
-    // 0 毫秒同步极速唤起（与 AList / OpenList 完全一致的 instant 触发）
     function openProtocolSync(uri) {
         const a = document.createElement('a');
         a.href = uri;
@@ -50,11 +71,12 @@
         }, 1000);
     }
 
-    // 同步获取纯净的 Direct Stream 网关地址
+    // 同步生成带真实影视名称的直链地址
     function getInstantStreamUrl() {
         const guid = extractCurrentGuid();
         if (!guid) return null;
-        return `${window.location.protocol}//${window.location.hostname}:5668/fnplay/${guid}/video.mkv`;
+        const fileName = encodeURIComponent(getPageTitle());
+        return `${window.location.protocol}//${window.location.hostname}:5668/fnplay/${guid}/${fileName}`;
     }
 
     const Players = [
