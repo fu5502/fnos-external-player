@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # 飞牛影视第三方播放器注入维护守护进程
 
 # 1. 确保 window.__ug 被导出
@@ -12,12 +12,12 @@ fi
 # 2. 确保 index.html 注入
 HTML1="/usr/local/apps/@appcenter/trim.media/static/index.html"
 if [ -f "$HTML1" ] && ! grep -q "fnExternalPlayer.js" "$HTML1"; then
-    sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=3.8" defer><\/script><\/body>/g' "$HTML1"
+    sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=3.9" defer><\/script><\/body>/g' "$HTML1"
 fi
 
 HTML2="/usr/trim/www/index.html"
 if [ -f "$HTML2" ] && ! grep -q "fnExternalPlayer.js" "$HTML2"; then
-    sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=3.8" defer><\/script><\/body>/g' "$HTML2"
+    sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=3.9" defer><\/script><\/body>/g' "$HTML2"
 fi
 
 # 3. 同步脚本文件
