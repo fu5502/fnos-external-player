@@ -43,12 +43,12 @@ fi
 # 注入 index.html
 HTML1="/usr/local/apps/@appcenter/trim.media/static/index.html"
 if [ -f "$HTML1" ] && ! grep -q "fnExternalPlayer.js" "$HTML1"; then
-    sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=4.0" defer><\/script><\/body>/g' "$HTML1"
+    sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=4.1" defer><\/script><\/body>/g' "$HTML1"
 fi
 
 HTML2="/usr/trim/www/index.html"
 if [ -f "$HTML2" ] && ! grep -q "fnExternalPlayer.js" "$HTML2"; then
-    sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=4.0" defer><\/script><\/body>/g' "$HTML2"
+    sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=4.1" defer><\/script><\/body>/g' "$HTML2"
 fi
 
 echo "[+] 4. 设置持久化定时维护任务 (防系统/应用更新重置)..."

@@ -1,13 +1,13 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v4.0 (智能片名展示版)
- * 1. 动态智能片名识别：在 PotPlayer、VLC、IINA 等播放器标题栏和播放列表中完美展示真实影视/单集名称！
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v4.1 (原生中文片名版)
+ * 1. 保持原生中文字符：PotPlayer / VLC 标题栏和播放列表中直接显示纯净中文片名，不转码为 %E7%89%...
  * 2. 100% 同步 0ms 极速唤起：对标 OpenList 原生直出体验
  * 3. 独家 Direct Stream 网关（端口 5668）+ RFC 3986 安全重定向，兼容本地高码率原盘与云盘 STRM
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.0 (Smart Title Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.1 (Raw Chinese Title) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     function getOS() {
         const u = navigator.userAgent;
@@ -38,10 +38,10 @@
         }
 
         if (!title || title === '飞牛' || title === '飞牛影视') {
-            title = '飞牛视频';
+            title = '视频播放';
         }
 
-        // 移除非法文件名字符
+        // 仅移除非法文件名字符，保留原生纯净中文字符
         title = title.replace(/[\\/:*?"<>|\r\n\t]/g, '_').trim();
         if (!title.toLowerCase().endsWith('.mkv') && !title.toLowerCase().endsWith('.mp4')) {
             title += '.mkv';
@@ -71,11 +71,11 @@
         }, 1000);
     }
 
-    // 同步生成带真实影视名称的直链地址
+    // 同步生成原生中文字符的直链地址（不做 URL 编码）
     function getInstantStreamUrl() {
         const guid = extractCurrentGuid();
         if (!guid) return null;
-        const fileName = encodeURIComponent(getPageTitle());
+        const fileName = getPageTitle(); // 原生中文名称
         return `${window.location.protocol}//${window.location.hostname}:5668/fnplay/${guid}/${fileName}`;
     }
 
@@ -91,7 +91,7 @@
                     showToast('请在电影或电视剧详情页点击');
                     return;
                 }
-                const potUrl = 'potplayer://' + encodeURI(streamUrl);
+                const potUrl = 'potplayer://' + streamUrl;
                 console.log('[fnExternalPlayer] 极速调起 PotPlayer ->', potUrl);
                 openProtocolSync(potUrl);
             }
@@ -105,10 +105,10 @@
                 const streamUrl = getInstantStreamUrl();
                 if (!streamUrl) return;
                 const os = getOS();
-                let vlcUrl = `vlc://${encodeURI(streamUrl)}`;
+                let vlcUrl = `vlc://${streamUrl}`;
                 if (os === 'android') {
                     const title = getPageTitle();
-                    vlcUrl = `intent:${encodeURI(streamUrl)}#Intent;package=org.videolan.vlc;type=video/*;S.title=${encodeURIComponent(title)};end`;
+                    vlcUrl = `intent:${streamUrl}#Intent;package=org.videolan.vlc;type=video/*;S.title=${title};end`;
                 } else if (os === 'ios') {
                     vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(streamUrl)}`;
                 }
@@ -151,10 +151,10 @@
                 const streamUrl = getInstantStreamUrl();
                 if (!streamUrl) return;
                 const os = getOS();
-                let mpvUrl = `mpv://${encodeURI(streamUrl)}`;
+                let mpvUrl = `mpv://${streamUrl}`;
                 if (os === 'windows' || os === 'macOS') {
                     try {
-                        const b64 = btoa(streamUrl).replace(/\//g, "_").replace(/\+/g, "-").replace(/=/g, "");
+                        const b64 = btoa(unescape(encodeURIComponent(streamUrl))).replace(/\//g, "_").replace(/\+/g, "-").replace(/=/g, "");
                         mpvUrl = `mpv://play/${b64}`;
                     } catch (err) {}
                 }
@@ -190,7 +190,7 @@
                 if (!streamUrl) return;
                 const nUrl = getOS() === 'macOS' 
                     ? `nplayer-mac://weblink?url=${encodeURIComponent(streamUrl)}&new_window=1` 
-                    : `nplayer-${encodeURI(streamUrl)}`;
+                    : `nplayer-${streamUrl}`;
                 console.log('[fnExternalPlayer] 极速调起 NPlayer ->', nUrl);
                 openProtocolSync(nUrl);
             }
@@ -203,7 +203,7 @@
             action: (e) => {
                 const streamUrl = getInstantStreamUrl();
                 if (!streamUrl) return;
-                const stUrl = `stellar://play/${encodeURI(streamUrl)}`;
+                const stUrl = `stellar://play/${streamUrl}`;
                 console.log('[fnExternalPlayer] 极速调起 恒星播放器 ->', stUrl);
                 openProtocolSync(stUrl);
             }
