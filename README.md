@@ -158,6 +158,19 @@ curl -sSL https://raw.githubusercontent.com/fu5502/fnos-external-player/main/uni
 * **[新增]** 历史观影进度断点自动续播 (`/seek`)；
 * **[发布]** 一键全自动安装与卸载脚本（`install.sh` / `uninstall.sh`）。
 
+
+## 🌏 社区与友情链接
+
+- [LINUX DO](https://linux.do) —— 真诚、友善、团结、专业。本项目在 [LINUX DO地址](https://linux.do/t/topic/2791574)) 社区发布与交流，欢迎前往讨论反馈。
+
+---
+
+<div align="center">
+
+如果 autoAPI 对你有帮助，欢迎点一个 ⭐ Star 支持开发！
+
+</div>
+
 ---
 
 ## 📄 开源协议
