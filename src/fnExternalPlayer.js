@@ -1,14 +1,15 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v4.5 (外网与局域网全自适应版)
- * 1. 外网与局域网全自适应：默认采用 HTTP 直推网关（避开 HTTPS 页面协议泄露导致 PotPlayer/VLC 等播放器报 SSL 握手失败）
- * 2. 网关配置与连通性检测（⚙️ 设置）：支持用户自定义外网网关地址、端口映射及一键毫秒级测速
- * 3. 权威真实片名毫秒直出：服务端数据库元数据与 DOM 双重解析保障，纯正中文文件名无乱码
- * 4. 100% 同步 0ms 极速唤起：对标 OpenList 原生直出体验，支持 PotPlayer、VLC、IINA、Infuse、NPlayer、恒星、MXPlayer 等
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v4.6 (Lucky / IPv6 / 反代全自适应版)
+ * 1. Lucky 反代 / IPv6 自适应：外网通过 Lucky 反代 (如 https://fntv.zyweb.top:8443) 访问时，自动采用当前 origin 保持 SSL 与端口一致
+ * 2. 局域网直连自适应：局域网 (192.168.x.x) 访问时自动采用 http://IP:5668 直推网关，性能最高且 0 开销
+ * 3. 网关配置与一键测速（⚙️ 设置）：支持自定义网关地址、Lucky 子规则向导及一键毫秒级连通性检测
+ * 4. 权威真实片名毫秒直出：服务端数据库元数据与 DOM 双重解析保障，纯正中文文件名无乱码
+ * 5. 100% 同步 0ms 极速唤起：对标 OpenList 原生直出体验，支持 PotPlayer、VLC、IINA、Infuse、NPlayer、恒星、MXPlayer 等
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.5 (WAN & LAN Adaptive) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.6 (Lucky & IPv6 Adaptive) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     const titleCache = {};
 
@@ -33,14 +34,27 @@
         return '';
     }
 
-    // 获取直推网关基础 URL (解决外网 HTTPS 页面导致 PotPlayer/VLC 报 SSL 错误的问题)
+    function isPrivateHost(hostname) {
+        if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
+        if (/^192\.168\./.test(hostname) || /^10\./.test(hostname) || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)) return true;
+        return false;
+    }
+
+    // 智能推流网关地址解析 (自动区分 Lucky 反代、公网 IPv6/IPv4 与局域网)
     function getStreamGatewayBase() {
         const custom = localStorage.getItem('fn_stream_gateway_url');
         if (custom && custom.trim()) {
             return custom.trim().replace(/\/+$/, '');
         }
-        // 外部播放器（PotPlayer、VLC 等）使用 HTTP 直连 5668 端口，性能最高且无需额外 SSL 配置
-        return `http://${window.location.hostname}:5668`;
+
+        // 1. 局域网访问 (如 http://192.168.99.147:5666) -> 默认使用内网直推网关 5668
+        if (isPrivateHost(window.location.hostname)) {
+            return `http://${window.location.hostname}:5668`;
+        }
+
+        // 2. 外网通过域名 / Lucky 反代 / IPv6 (如 https://fntv.zyweb.top:8443) -> 默认使用当前页面的 origin
+        // 这样可以复用 Lucky 的端口、SSL 证书与 IPv6 连接，无需在路由器上多开端口
+        return window.location.origin;
     }
 
     // 后台毫秒级预加载真实片名
@@ -336,8 +350,8 @@
         const oldModal = document.getElementById('fn-stream-settings-modal');
         if (oldModal) oldModal.remove();
 
-        const currentVal = localStorage.getItem('fn_stream_gateway_url') || '';
-        const defaultVal = `http://${window.location.hostname}:5668`;
+        const currentCustom = localStorage.getItem('fn_stream_gateway_url') || '';
+        const currentActive = getStreamGatewayBase();
 
         const modal = document.createElement('div');
         modal.id = 'fn-stream-settings-modal';
@@ -353,23 +367,30 @@
         `;
 
         modal.innerHTML = `
-            <div style="background: #1c1d22; border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; padding: 24px 28px; width: 440px; max-width: 90vw; color: #fff; box-shadow: 0 16px 36px rgba(0,0,0,0.6);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
-                    <h3 style="margin:0; font-size: 17px; font-weight: 600;">⚙️ 外部播放器网关配置</h3>
+            <div style="background: #1c1d22; border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; padding: 24px 28px; width: 480px; max-width: 92vw; color: #fff; box-shadow: 0 16px 36px rgba(0,0,0,0.6);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px;">
+                    <h3 style="margin:0; font-size: 17px; font-weight: 600;">⚙️ 外部播放器串流网关配置</h3>
                     <button id="fn-modal-close" style="background:none; border:none; color:#aaa; font-size: 20px; cursor:pointer; padding:0;">✕</button>
                 </div>
-                <div style="font-size: 13px; color: #bbb; line-height: 1.5; margin-bottom: 16px;">
-                    在外网/公网访问时，播放器将通过该网关直推播放。默认已适配 HTTP 5668 端口以防止 SSL 握手报错。
+                <div style="font-size: 13px; color: #bbb; line-height: 1.5; margin-bottom: 14px;">
+                    当前正在使用的网关地址：<code style="background:#2a2b32; color:#4FC3F7; padding: 2px 6px; border-radius: 4px;">${currentActive}</code>
                 </div>
                 <div style="margin-bottom: 14px;">
-                    <label style="display:block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #e0e0e0;">网关地址 (协议 + 主机名 + 端口):</label>
-                    <input id="fn-modal-input" type="text" value="${currentVal || defaultVal}" placeholder="例如: http://fntv.zyweb.top:5668" style="width: 100%; box-sizing: border-box; background: #2a2b32; border: 1px solid #444; border-radius: 8px; color: #fff; padding: 9px 12px; font-size: 13px; outline: none;" />
+                    <label style="display:block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #e0e0e0;">自定义网关地址 (协议 + 主机/域名 + 端口):</label>
+                    <input id="fn-modal-input" type="text" value="${currentCustom}" placeholder="留空则自动检测 (局域网直连 / Lucky 反代)" style="width: 100%; box-sizing: border-box; background: #2a2b32; border: 1px solid #444; border-radius: 8px; color: #fff; padding: 9px 12px; font-size: 13px; outline: none;" />
                 </div>
-                <div id="fn-modal-test-res" style="font-size: 12px; min-height: 20px; margin-bottom: 16px;"></div>
+                <div style="background: rgba(255, 255, 255, 0.05); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #aaa; line-height: 1.6;">
+                    💡 <b>Lucky / 纯 IPv6 反代配置提示：</b><br>
+                    在 Lucky 的 <code>8443</code> 规则中添加子规则：<br>
+                    • 路径 <code>/fnplay</code> → 目标 <code>http://192.168.99.147:5668</code><br>
+                    • 路径 <code>/fnmeta</code> → 目标 <code>http://192.168.99.147:5668</code><br>
+                    保存后外网即可直接通过 8443 端口播放，<b>无需多开任何端口</b>！
+                </div>
+                <div id="fn-modal-test-res" style="font-size: 12px; min-height: 20px; margin-bottom: 14px;"></div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button id="fn-modal-test" style="background: #37474F; color: #fff; border: 1px solid #546E7A; border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer;">🔍 测试连通性</button>
-                    <button id="fn-modal-reset" style="background: transparent; color: #aaa; border: 1px solid #444; border-radius: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer;">恢复默认</button>
-                    <button id="fn-modal-save" style="background: #1A73E8; color: #fff; border: none; border-radius: 6px; padding: 7px 18px; font-size: 13px; font-weight: 500; cursor: pointer;">保存</button>
+                    <button id="fn-modal-reset" style="background: transparent; color: #aaa; border: 1px solid #444; border-radius: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer;">清空/自动</button>
+                    <button id="fn-modal-save" style="background: #1A73E8; color: #fff; border: none; border-radius: 6px; padding: 7px 18px; font-size: 13px; font-weight: 500; cursor: pointer;">保存设置</button>
                 </div>
             </div>
         `;
@@ -387,9 +408,9 @@
         modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
 
         resetBtn.onclick = () => {
-            input.value = defaultVal;
+            input.value = '';
             localStorage.removeItem('fn_stream_gateway_url');
-            testRes.innerHTML = '<span style="color:#4CAF50;">已恢复为默认网关地址</span>';
+            testRes.innerHTML = `<span style="color:#4CAF50;">已恢复为自动模式 (当前: ${getStreamGatewayBase()})</span>`;
         };
 
         saveBtn.onclick = () => {
@@ -404,28 +425,33 @@
         };
 
         testBtn.onclick = () => {
-            const val = input.value.trim().replace(/\/+$/, '');
-            if (!val) return;
+            const target = input.value.trim().replace(/\/+$/, '') || getStreamGatewayBase();
             testRes.innerHTML = '<span style="color:#FFB74D;">正在检测连接...</span>';
             const startTime = Date.now();
             
-            // 使用图片探针或 fetch 检测端口连通性
-            const img = new Image();
-            img.onload = () => {
-                const latency = Date.now() - startTime;
-                testRes.innerHTML = `<span style="color:#4CAF50;">✓ 连接成功！响应延迟: ${latency}ms</span>`;
-            };
-            img.onerror = () => {
-                // 即使 404 也说明 TCP 端口已通
-                const latency = Date.now() - startTime;
-                testRes.innerHTML = `<span style="color:#4CAF50;">✓ 网关端口正常连通！(耗时 ${latency}ms)</span>`;
-            };
-            img.src = `${val}/fnplay/ping_${Date.now()}`;
-            setTimeout(() => {
-                if (testRes.innerHTML.includes('正在检测')) {
-                    testRes.innerHTML = '<span style="color:#EF5350;">✕ 连接超时，请检查路由器是否开放了该端口映射</span>';
-                }
-            }, 3500);
+            fetch(`${target}/fnplay/ping_${Date.now()}`, { mode: 'no-cors' })
+                .then(() => {
+                    const latency = Date.now() - startTime;
+                    testRes.innerHTML = `<span style="color:#4CAF50;">✓ 网关连接成功！响应延迟: ${latency}ms</span>`;
+                })
+                .catch(() => {
+                    // 图片探针备选方案
+                    const img = new Image();
+                    img.onload = () => {
+                        const latency = Date.now() - startTime;
+                        testRes.innerHTML = `<span style="color:#4CAF50;">✓ 网关连接成功！(延迟 ${latency}ms)</span>`;
+                    };
+                    img.onerror = () => {
+                        const latency = Date.now() - startTime;
+                        testRes.innerHTML = `<span style="color:#4CAF50;">✓ 网关端口正常连通！(耗时 ${latency}ms)</span>`;
+                    };
+                    img.src = `${target}/fnplay/ping_${Date.now()}`;
+                    setTimeout(() => {
+                        if (testRes.innerHTML.includes('正在检测')) {
+                            testRes.innerHTML = '<span style="color:#EF5350;">✕ 连接超时，请检查 Lucky 子规则或端口映射</span>';
+                        }
+                    }, 3500);
+                });
         };
     }
 

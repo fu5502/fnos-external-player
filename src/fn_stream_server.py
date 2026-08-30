@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-飞牛影视（fnOS）Direct Stream 高性能串流网关 v4.5
+飞牛影视（fnOS）Direct Stream 高性能串流网关 v4.6
 - 多线程并发 HTTP 206 流式传输（本地高码率原盘 0 卡顿）
 - 局域网与外网自适应 302 重定向解析（自动将局域网 OpenList strm 解析为公网云端 CDN 直链）
 - RFC 3986 特殊字符安全编码（彻底解决中文与特殊括号导致的 302 报错）
-- 毫秒级元数据精准查询接口 (/fnmeta/{guid}) 与网关连通性检测 (/fnplay/ping)
+- 兼容 Lucky 反代前缀匹配与直接路径分发
 """
 import os, sys, sqlite3, mimetypes, urllib.parse, urllib.request, json
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -72,7 +72,6 @@ def safe_quote_url(url):
     return urllib.parse.urlunsplit((parts.scheme, parts.netloc, quoted_path, quoted_query, parts.fragment))
 
 def resolve_strm_target(strm_url):
-    # 如果 STRM 包含私有局域网 IP，NAS 本地代为解析 302 提取公网云盘 CDN 直链
     is_private_ip = any(strm_url.startswith(f'http://{prefix}') or strm_url.startswith(f'https://{prefix}') 
                         for prefix in ['192.168.', '10.', '127.', 'localhost', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.'])
     if is_private_ip:
@@ -114,13 +113,15 @@ class StreamHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         parts = [p for p in parsed.path.split('/') if p]
         
+        print(f"[REQ] method={self.command} path={self.path} parts={parts}", flush=True)
+
         if not parts:
             self.send_error(404)
             return
 
         # 0. 连通性检测接口 (/fnplay/ping 或 /ping)
-        if parts[0] in ('ping', 'fnplay') and (len(parts) == 1 or parts[-1].startswith('ping')):
-            resp = b'{"status":"ok","server":"fn_stream_server v4.5"}'
+        if 'ping' in parts[0] or (len(parts) > 1 and 'ping' in parts[-1]):
+            resp = b'{"status":"ok","server":"fn_stream_server v4.6"}'
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(resp)))
@@ -130,9 +131,31 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.wfile.write(resp)
             return
 
-        # 1. 毫秒级元数据精准查询接口 (/fnmeta/{guid})
-        if parts[0] == 'fnmeta' and len(parts) >= 2:
-            guid = parts[1]
+        # 兼容 Lucky 前缀剥离或保留两种模式
+        action = None
+        guid = None
+        
+        for i, p in enumerate(parts):
+            if p in ('fnmeta', 'fnplay', 'v'):
+                action = p
+                if i + 1 < len(parts):
+                    guid = parts[i + 1]
+                break
+        
+        if not action and len(parts) >= 1:
+            # 可能是 Lucky 剥离了前缀直接发来 guid (如 /976d98bc9ca34b4798f696561ceab6c0/xxx.mkv)
+            if len(parts[0]) >= 20:
+                action = 'fnplay'
+                guid = parts[0]
+
+        if action == 'v' and len(parts) >= 3 and parts[1] in ('fnplay', 'fnmeta'):
+            action = parts[1]
+            guid = parts[2]
+
+        print(f"[RESOLVED] action={action} guid={guid}", flush=True)
+
+        # 1. 毫秒级元数据精准查询接口
+        if action == 'fnmeta' and guid:
             file_path, _ = get_media_info(guid)
             title = get_accurate_title(guid, file_path)
             resp = json.dumps({"code": 0, "guid": guid, "title": title}).encode('utf-8')
@@ -145,12 +168,11 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.wfile.write(resp)
             return
 
-        # 2. 高性能播放直推与 302 重定向 (/fnplay/{guid}/[filename])
-        if parts[0] == 'fnplay' and len(parts) >= 2:
-            guid = parts[1]
+        # 2. 高性能播放直推与 302 重定向
+        if action == 'fnplay' and guid:
             file_path, item_guid = get_media_info(guid)
             if not file_path or not os.path.exists(file_path):
-                self.send_error(404, "Media file not found on disk")
+                self.send_error(404, f"Media file not found on disk: guid={guid}")
                 return
 
             # 如果是 .strm 文件：安全 URL 编码后即时 302 重定向到原生/云端 CDN 链接！
@@ -232,12 +254,12 @@ class StreamHandler(BaseHTTPRequestHandler):
                 pass
             return
 
-        self.send_error(404)
+        self.send_error(404, "Invalid request path")
 
     def log_message(self, format, *args):
         pass
 
 if __name__ == '__main__':
     server = ThreadingHTTPServer(('0.0.0.0', 5668), StreamHandler)
-    print("fnplay stream server listening on 0.0.0.0:5668...")
+    print("fnplay stream server listening on 0.0.0.0:5668...", flush=True)
     server.serve_forever()

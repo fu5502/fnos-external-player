@@ -4,12 +4,12 @@
 
 **为飞牛 OS (fnOS) 飞牛影视 (`trim.media`) 打造的服务端免插件注入增强工具**
 
-[![GitHub Release](https://img.shields.io/badge/Release-v4.5-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
+[![GitHub Release](https://img.shields.io/badge/Release-v4.6-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-fnOS%20%7C%20Linux%20x86__64-orange.svg?style=flat-square)](https://www.fnnas.com/)
 [![Supported Players](https://img.shields.io/badge/Players-PotPlayer%20%7C%20VLC%20%7C%20IINA%20%7C%20Infuse%20%7C%20MPV-purple.svg?style=flat-square)](#-支持的外部播放器矩阵)
 
-[功能特性](#-功能特性) • [效果预览](#-效果预览) • [一键安装](#-一键安装) • [外网与公网访问](#-公网外网与远程访问说明) • [播放器矩阵](#-支持的外部播放器矩阵) • [系统架构](#-核心架构与技术突破) • [常见问题](#-常见问题-faq) • [更新日志](#-更新日志)
+[功能特性](#-功能特性) • [效果预览](#-效果预览) • [一键安装](#-一键安装) • [Lucky 与纯 IPv6 配置向导](#-lucky--纯-ipv6-反代配置向导无需额外端口) • [播放器矩阵](#-支持的外部播放器矩阵) • [系统架构](#-核心架构与技术突破) • [常见问题](#-常见问题-faq) • [更新日志](#-更新日志)
 
 </div>
 
@@ -39,9 +39,9 @@
 * ⚡ **OpenList / AList 级别极致秒播**：
   * **0 毫秒即时响应**：去除传统点击时的异步网络延迟，点击按钮瞬间（0ms）直接触发系统协议唤起播放器，体验与在 OpenList / AList 网页中秒开完全一致；
   * **0.07 秒极速 302 直连**：全面兼容 Alist / OpenList / 天翼云盘 / 115 / 夸克 / 阿里云盘 生成的 `.strm` 文件，毫秒级 302 重定向到顶级 CDN 直链，跑满千兆宽带秒开；
-* 🌐 **公网外网与局域网全自适应 (v4.5 新增)**：
-  * **HTTP 直推隔离机制**：外部播放器协议统一生成 HTTP 直连串流，彻底消除在外网通过 HTTPS 域名访问飞牛网页时因协议继承导致的 PotPlayer/VLC 报 SSL 握手失败问题；
-  * **⚙️ 可视化网关配置与毫秒级测速**：工具栏新增设置弹窗，支持自定义公网/外网网关地址、DDNS 与端口映射，并提供一键连通性探测与延迟诊断；
+* 🌐 **Lucky 反代与纯 IPv6 全自适应 (v4.6 核心突破)**：
+  * **零端口增加**：外网通过 Lucky 反代（如 `https://fntv.zyweb.top:8443`）访问时，自动复用当前页面的域名、HTTPS 证书与端口，**无需在路由器上单独为串流多开任何端口**；
+  * **⚙️ 可视化网关配置与一键测速**：工具栏新增设置弹窗，支持自定义网关地址与一键毫秒级连通性探测；
   * **局域网 STRM 外网智能穿透**：当 STRM 指向内网私有 IP（如局域网 OpenList `192.168.x.x`）时，NAS 后端会自动向 OpenList 提取公网云盘 CDN 直链，外网 5G 远程也能流畅播放；
 * 🏷️ **权威真实中文片名识别（`/fnmeta` 毫秒级直通）**：
   * 服务端直连 SQLite 数据库与底层存储，精准提取电影、电视剧、分集及番外篇的原生真实中文文件名；
@@ -69,12 +69,26 @@ curl -fsSL https://raw.githubusercontent.com/fu5502/fnos-external-player/main/in
 
 ---
 
-## 🌐 公网/外网与远程访问说明
+## 🌐 Lucky / 纯 IPv6 反代配置向导（无需额外端口）
 
-如果你在公网（如通过 DDNS、域名或内网穿透）访问飞牛影视：
-1. **端口放行**：请确保路由器或防火墙已放行/转发 **`5668` 端口**（例如将外网 `5668` 转发到 NAS 的 `5668` 端口）；
-2. **自定义网关**：点击播放栏末尾的 **「⚙️ 设置」** 按钮，可输入你的公网网关地址（例如 `http://fntv.yourdomain.com:5668`），点击 **「🔍 测试连通性」** 即可瞬间确认网络是否通畅并自动保存；
-3. **播放体验**：保存后点击 PotPlayer / VLC 即可直接远程以原始码率或云盘直链极速秒开！
+如果你没有公网 IPv4，使用 **IPv6 + Lucky 反代**（如 `https://fntv.zyweb.top:8443`）：
+
+只需在 Lucky 的 `8443` 飞牛影视反代规则中，添加 **2 条子规则** 即可（复用同一个 8443 端口与 HTTPS 证书，无需开放 5668 端口）：
+
+1. 打开 **Lucky 管理后台** → **Web 服务** → 找到反代飞牛影视（`8443` 端口）的规则；
+2. 点击 **「添加子规则」**（或编辑规则内部的子规则）：
+   * **子规则 1 (串流直推)**：
+     * **规则名称**：`fnplay`
+     * **匹配模式**：`包含` 或 `前缀匹配`
+     * **匹配路径**：`/fnplay`
+     * **反代目标**：`http://192.168.99.147:5668`
+   * **子规则 2 (元数据接口)**：
+     * **规则名称**：`fnmeta`
+     * **匹配模式**：`包含` 或 `前缀匹配`
+     * **匹配路径**：`/fnmeta`
+     * **反代目标**：`http://192.168.99.147:5668`
+3. 点击 **保存**。
+4. 在外网打开 `https://fntv.zyweb.top:8443` 飞牛影视，点击外部播放器工具栏末尾的 **「⚙️ 设置」**，点击 **「🔍 测试连通性」** 显示 `✓ 网关连接成功` 即可！
 
 ---
 
@@ -101,16 +115,21 @@ curl -fsSL https://raw.githubusercontent.com/fu5502/fnos-external-player/main/in
 flowchart TD
     subgraph 客户端 [浏览器与本地播放器]
         Browser["飞牛影视 Web 界面"]
-        Bar["外部播放器工具栏 v4.5"]
+        Bar["外部播放器工具栏 v4.6"]
         Settings["⚙️ 网关配置与测速模态框"]
         PotPlayer["PotPlayer / VLC / IINA / Infuse"]
     end
 
-    subgraph fnOS [飞牛 OS 服务端 (192.168.x.x)]
+    subgraph WAN [外网 Lucky 反代 (:8443)]
+        Lucky["Lucky IPv6 + HTTPS 反代"]
+        Sub1["子规则: /fnplay -> :5668"]
+        Sub2["子规则: /fnmeta -> :5668"]
+        Main["默认规则: /* -> :5666"]
+    end
+
+    subgraph fnOS [飞牛 OS 服务端 (192.168.99.147)]
         DB[("SQLite trimmedia.db")]
         Gateway["Direct Stream 网关 (:5668)"]
-        MetaAPI["元数据接口 (/fnmeta)"]
-        StreamAPI["推流接口 (/fnplay)"]
         Disk["本地存储 (NAS 原盘)"]
         Daemon["自愈守护进程 (fn_player_daemon.sh)"]
     end
@@ -122,14 +141,15 @@ flowchart TD
 
     Browser --> Bar
     Bar --> Settings
-    Bar -.->|后台预加载 5ms| MetaAPI
-    MetaAPI -->|极速查询片名| DB
-    Bar ==>|0ms 同步协议唤起| PotPlayer
+    Bar ==>|0ms 唤起 (https://fntv.zyweb.top:8443/fnplay/...)| PotPlayer
 
-    PotPlayer -->|HTTP Range 探测请求| StreamAPI
-    StreamAPI -->|本地原盘文件| Disk
-    Disk -->|多线程 HTTP 206| PotPlayer
-    StreamAPI -->|STRM 串流文件| OpenList
+    PotPlayer -->|IPv6 HTTPS 8443 请求| Lucky
+    Lucky --> Sub1
+    Sub1 --> Gateway
+
+    Gateway -->|本地原盘文件| Disk
+    Disk -->|多线程 HTTP 206| Gateway
+    Gateway -->|STRM 串流文件| OpenList
     OpenList -->|提取 CDN 直链| OSS
     OSS -->|302 RFC 3986 直连| PotPlayer
 
@@ -147,8 +167,8 @@ A: 请确保您的电脑/设备上已安装对应的播放器。如果是 Window
 
 <details>
 <summary><b>Q2: 外网远程访问时点击 PotPlayer 提示无法播放？</b></summary>
-A: 1. 请确认路由器已开放并将 `5668` 端口映射到 NAS；<br>
-2. 在飞牛影视页面点击工具栏右侧的「⚙️ 设置」，输入公网网关地址（如 `http://你的域名:5668`），并点击「测试连通性」验证。
+A: 如果使用 Lucky 反代（如 `https://域名:8443`），请在 Lucky 对应规则中添加 `/fnplay` 与 `/fnmeta` 指向 `http://192.168.99.147:5668` 的子规则；<br>
+若使用端口映射，请确认路由器已开放 `5668` 端口。
 </details>
 
 <details>
@@ -165,17 +185,16 @@ A: 不会。系统内置了自动守护进程 `fn_player_daemon.sh`，每分钟�
 
 ## 📝 更新日志
 
+* **v4.6 (2026-08-30)**
+  * 🌐 **Lucky 反代与纯 IPv6 全自适应**：外网通过 Lucky 反代（如 `https://fntv.zyweb.top:8443`）访问时自动复用相同 origin，配合 Lucky 子规则实现零多开端口播放；
+  * ⚙️ **可视化网关配置向导**：弹窗中提供针对 Lucky / IPv6 的一键设置说明与网络测速；
 * **v4.5 (2026-08-30)**
-  * 🌐 **公网/外网全自适应**：播放器默认采用 HTTP 直连 5668 端口，彻底解决在外网通过 HTTPS 域名访问飞牛网页时因协议继承导致的 PotPlayer/VLC 报 SSL 握手失败问题；
-  * ⚙️ **外网网关配置面板**：新增可视化设置弹窗，支持自定义外网网关地址、端口映射及一键毫秒级测速与连通性检测；
-  * 🚀 **局域网 STRM 外网智能穿透**：当 STRM 指向内网私有 IP（如局域网 OpenList `192.168.x.x`）时，NAS 后端会自动向 OpenList 提取公网云盘 CDN 直链，外网 5G 远程也能流畅播放；
+  * 🛡️ **HTTP 直推隔离与全自适应**：局域网环境默认直连 5668 端口，消除 SSL 握手报错；
+  * 🚀 **局域网 STRM 外网智能穿透**：当 STRM 指向内网私有 IP 时 NAS 自动代为解析 302 提取云端直链；
 * **v4.4 (2026-08-30)**
-  * 🏷️ **权威真实中文片名直通**：新增 `/fnmeta/:guid` 服务端数据库元数据高速直通接口，彻底解决 PotPlayer 标题乱码或无法获取剧集真实名称的问题；
-  * 🔠 **纯正中文原名呈现**：支持原生中文字符（如 `冷库01：捉迷藏.rmvb`）无转义展示；
+  * 🏷️ **权威真实中文片名直通**：新增 `/fnmeta/:guid` 服务端元数据高速直通接口；
 * **v3.9 (2026-08-30)**
   * ⚡ **0ms 极速直出唤起**：去除点击时的异步网络阻塞，点击瞬间秒级调起播放器；
-  * 🔀 **多线程并发推流网关**：切换至多线程并发流媒体传输架构，完美承载 PotPlayer 多路并发 Range 请求；
-  * 🛡️ **RFC 3986 特殊字符编码**：修复带有 `[` `]` 特殊字符的 STRM 链接在 302 重定向时的报错；
 * **v1.0 - v3.0**
   * 🎉 初始全平台播放器支持与飞牛影视自动化无损注入框架发布。
 

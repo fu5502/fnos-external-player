@@ -44,18 +44,18 @@ fi
 HTML1="/usr/local/apps/@appcenter/trim.media/static/index.html"
 if [ -f "$HTML1" ]; then
     if grep -q "fnExternalPlayer.js" "$HTML1"; then
-        sed -i 's/fnExternalPlayer\.js\?v=[0-9.]*/fnExternalPlayer.js?v=4.5/g' "$HTML1"
+        sed -i 's/fnExternalPlayer\.js\?v=[0-9.]*/fnExternalPlayer.js?v=4.6/g' "$HTML1"
     else
-        sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=4.5" defer><\/script><\/body>/g' "$HTML1"
+        sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=4.6" defer><\/script><\/body>/g' "$HTML1"
     fi
 fi
 
 HTML2="/usr/trim/www/index.html"
 if [ -f "$HTML2" ]; then
     if grep -q "fnExternalPlayer.js" "$HTML2"; then
-        sed -i 's/fnExternalPlayer\.js\?v=[0-9.]*/fnExternalPlayer.js?v=4.5/g' "$HTML2"
+        sed -i 's/fnExternalPlayer\.js\?v=[0-9.]*/fnExternalPlayer.js?v=4.6/g' "$HTML2"
     else
-        sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=4.5" defer><\/script><\/body>/g' "$HTML2"
+        sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=4.6" defer><\/script><\/body>/g' "$HTML2"
     fi
 fi
 
