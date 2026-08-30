@@ -1,17 +1,14 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v4.6 (Lucky / IPv6 / 反代全自适应版)
- * 1. Lucky 反代 / IPv6 自适应：外网通过 Lucky 反代 (如 https://fntv.zyweb.top:8443) 访问时，自动采用当前 origin 保持 SSL 与端口一致
- * 2. 局域网直连自适应：局域网 (192.168.x.x) 访问时自动采用 http://IP:5668 直推网关，性能最高且 0 开销
- * 3. 网关配置与一键测速（⚙️ 设置）：支持自定义网关地址、Lucky 子规则向导及一键毫秒级连通性检测
- * 4. 权威真实片名毫秒直出：服务端数据库元数据与 DOM 双重解析保障，纯正中文文件名无乱码
- * 5. 100% 同步 0ms 极速唤起：对标 OpenList 原生直出体验，支持 PotPlayer、VLC、IINA、Infuse、NPlayer、恒星、MXPlayer 等
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v4.7 (轻量零开销极速秒播版)
+ * 1. 零后台网络轮询：彻底移除后台 fetch 预加载，避免大流量挤占带宽或导致网页卡顿崩溃
+ * 2. 100% 毫秒级 DOM 高精片名识别：同步瞬时提取真实中文剧集名称，纯正中文原名无乱码
+ * 3. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
+ * 4. 0ms 同步极速唤起：对标 OpenList 极致体验，支持 PotPlayer、VLC、IINA、Infuse 等全平台播放器
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.6 (Lucky & IPv6 Adaptive) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
-
-    const titleCache = {};
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.7 (Ultra-Fast & Zero-Overhead) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     function getOS() {
         const u = navigator.userAgent;
@@ -53,32 +50,14 @@
         }
 
         // 2. 外网通过域名 / Lucky 反代 / IPv6 (如 https://fntv.zyweb.top:8443) -> 默认使用当前页面的 origin
-        // 这样可以复用 Lucky 的端口、SSL 证书与 IPv6 连接，无需在路由器上多开端口
         return window.location.origin;
     }
 
-    // 后台毫秒级预加载真实片名
-    function prefetchMeta(guid) {
-        if (!guid || titleCache[guid]) return;
-        const gateway = getStreamGatewayBase();
-        fetch(`${gateway}/fnmeta/${guid}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.title) {
-                    titleCache[guid] = data.title;
-                    console.log(`[fnExternalPlayer] 预加载片名成功: ${guid} -> ${data.title}`);
-                }
-            })
-            .catch(() => {
-                // 混合内容或跨域时静默失败，自动降级为精准 DOM 片名解析
-            });
-    }
-
-    // 从网页 DOM 提取高精度中文片名
-    function getFallbackTitle() {
+    // 从网页 DOM 提取高精度中文片名 (0ms 纯本地同步解析，不发任何网络请求)
+    function getCleanMediaTitle() {
         let title = '';
 
-        // 1. 详情页主标题/单集标题元素
+        // 1. 优先尝试从详情页抓取主标题与单集标题
         const titleSelectors = [
             '[class*="episode-title"]', '[class*="episodeTitle"]',
             '[class*="video-title"]', '[class*="film-title"]',
@@ -97,7 +76,7 @@
             if (title) break;
         }
 
-        // 2. 网页 document.title
+        // 2. 网页 document.title 备用
         if (!title && document.title) {
             const cleanDocTitle = document.title
                 .replace(/\s*[-_]\s*飞牛影视.*/, '')
@@ -130,11 +109,11 @@
         }, 1000);
     }
 
-    // 同步生成包含权威真实片名的直链
+    // 0ms 同步生成直链
     function getInstantStreamUrl() {
         const guid = extractCurrentGuid();
         if (!guid) return null;
-        const fileName = titleCache[guid] || getFallbackTitle();
+        const fileName = getCleanMediaTitle();
         const gateway = getStreamGatewayBase();
         return `${gateway}/fnplay/${guid}/${fileName}`;
     }
@@ -167,7 +146,7 @@
                 const os = getOS();
                 let vlcUrl = `vlc://${streamUrl}`;
                 if (os === 'android') {
-                    const title = titleCache[extractCurrentGuid()] || getFallbackTitle();
+                    const title = getCleanMediaTitle();
                     vlcUrl = `intent:${streamUrl}#Intent;package=org.videolan.vlc;type=video/*;S.title=${title};end`;
                 } else if (os === 'ios') {
                     vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(streamUrl)}`;
@@ -210,7 +189,7 @@
             action: (e) => {
                 const streamUrl = getInstantStreamUrl();
                 if (!streamUrl) return;
-                const title = titleCache[extractCurrentGuid()] || getFallbackTitle();
+                const title = getCleanMediaTitle();
                 const mxUrl = `intent:${streamUrl}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;S.title=${title};end`;
                 console.log('[fnExternalPlayer] 极速调起 MXPlayer ->', mxUrl);
                 openProtocolSync(mxUrl);
@@ -373,18 +352,11 @@
                     <button id="fn-modal-close" style="background:none; border:none; color:#aaa; font-size: 20px; cursor:pointer; padding:0;">✕</button>
                 </div>
                 <div style="font-size: 13px; color: #bbb; line-height: 1.5; margin-bottom: 14px;">
-                    当前正在使用的网关地址：<code style="background:#2a2b32; color:#4FC3F7; padding: 2px 6px; border-radius: 4px;">${currentActive}</code>
+                    当前使用的网关地址：<code style="background:#2a2b32; color:#4FC3F7; padding: 2px 6px; border-radius: 4px;">${currentActive}</code>
                 </div>
                 <div style="margin-bottom: 14px;">
-                    <label style="display:block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #e0e0e0;">自定义网关地址 (协议 + 主机/域名 + 端口):</label>
+                    <label style="display:block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #e0e0e0;">自定义网关地址 (留空则自动检测):</label>
                     <input id="fn-modal-input" type="text" value="${currentCustom}" placeholder="留空则自动检测 (局域网直连 / Lucky 反代)" style="width: 100%; box-sizing: border-box; background: #2a2b32; border: 1px solid #444; border-radius: 8px; color: #fff; padding: 9px 12px; font-size: 13px; outline: none;" />
-                </div>
-                <div style="background: rgba(255, 255, 255, 0.05); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #aaa; line-height: 1.6;">
-                    💡 <b>Lucky / 纯 IPv6 反代配置提示：</b><br>
-                    在 Lucky 的 <code>8443</code> 规则中添加子规则：<br>
-                    • 路径 <code>/fnplay</code> → 目标 <code>http://192.168.99.147:5668</code><br>
-                    • 路径 <code>/fnmeta</code> → 目标 <code>http://192.168.99.147:5668</code><br>
-                    保存后外网即可直接通过 8443 端口播放，<b>无需多开任何端口</b>！
                 </div>
                 <div id="fn-modal-test-res" style="font-size: 12px; min-height: 20px; margin-bottom: 14px;"></div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
@@ -410,7 +382,7 @@
         resetBtn.onclick = () => {
             input.value = '';
             localStorage.removeItem('fn_stream_gateway_url');
-            testRes.innerHTML = `<span style="color:#4CAF50;">已恢复为自动模式 (当前: ${getStreamGatewayBase()})</span>`;
+            testRes.innerHTML = `<span style="color:#4CAF50;">已恢复为自动模式</span>`;
         };
 
         saveBtn.onclick = () => {
@@ -435,22 +407,7 @@
                     testRes.innerHTML = `<span style="color:#4CAF50;">✓ 网关连接成功！响应延迟: ${latency}ms</span>`;
                 })
                 .catch(() => {
-                    // 图片探针备选方案
-                    const img = new Image();
-                    img.onload = () => {
-                        const latency = Date.now() - startTime;
-                        testRes.innerHTML = `<span style="color:#4CAF50;">✓ 网关连接成功！(延迟 ${latency}ms)</span>`;
-                    };
-                    img.onerror = () => {
-                        const latency = Date.now() - startTime;
-                        testRes.innerHTML = `<span style="color:#4CAF50;">✓ 网关端口正常连通！(耗时 ${latency}ms)</span>`;
-                    };
-                    img.src = `${target}/fnplay/ping_${Date.now()}`;
-                    setTimeout(() => {
-                        if (testRes.innerHTML.includes('正在检测')) {
-                            testRes.innerHTML = '<span style="color:#EF5350;">✕ 连接超时，请检查 Lucky 子规则或端口映射</span>';
-                        }
-                    }, 3500);
+                    testRes.innerHTML = '<span style="color:#EF5350;">✕ 连接失败，请检查网络</span>';
                 });
         };
     }
@@ -551,11 +508,6 @@
     }
 
     function tryInject() {
-        const guid = extractCurrentGuid();
-        if (guid) {
-            prefetchMeta(guid);
-        }
-
         const existing = document.getElementById('fn-external-player-bar');
         if (existing && document.body.contains(existing)) {
             return;
@@ -581,7 +533,7 @@
         subtree: true
     });
 
-    setInterval(tryInject, 800);
+    setInterval(tryInject, 1000);
     window.addEventListener('load', tryInject);
     window.addEventListener('popstate', () => setTimeout(tryInject, 200));
     window.addEventListener('hashchange', () => setTimeout(tryInject, 200));

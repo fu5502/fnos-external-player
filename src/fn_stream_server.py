@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-飞牛影视（fnOS）Direct Stream 高性能串流网关 v4.6
-- 多线程并发 HTTP 206 流式传输（本地高码率原盘 0 卡顿）
-- 局域网与外网自适应 302 重定向解析（自动将局域网 OpenList strm 解析为公网云端 CDN 直链）
-- RFC 3986 特殊字符安全编码（彻底解决中文与特殊括号导致的 302 报错）
-- 兼容 Lucky 反代前缀匹配与直接路径分发
+飞牛影视（fnOS）Direct Stream 高性能串流网关 v4.7 (零内存开销极速版)
+- 严密路由隔离：绝对禁止向元数据探测请求返回视频流
+- 专为 PotPlayer / VLC 优化的大并发高吞吐 Range 206 流式传输
+- RFC 3986 特殊字符安全编码与 STRM 毫秒级 302 直连
 """
 import os, sys, sqlite3, mimetypes, urllib.parse, urllib.request, json
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -62,7 +61,7 @@ def get_media_info(guid):
 
         conn.close()
     except Exception as e:
-        print(f"DB Error: {e}")
+        pass
     return None, None
 
 def safe_quote_url(url):
@@ -113,15 +112,13 @@ class StreamHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         parts = [p for p in parsed.path.split('/') if p]
         
-        print(f"[REQ] method={self.command} path={self.path} parts={parts}", flush=True)
-
         if not parts:
             self.send_error(404)
             return
 
         # 0. 连通性检测接口 (/fnplay/ping 或 /ping)
         if 'ping' in parts[0] or (len(parts) > 1 and 'ping' in parts[-1]):
-            resp = b'{"status":"ok","server":"fn_stream_server v4.6"}'
+            resp = b'{"status":"ok","server":"fn_stream_server v4.7"}'
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(resp)))
@@ -131,31 +128,15 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.wfile.write(resp)
             return
 
-        # 兼容 Lucky 前缀剥离或保留两种模式
-        action = None
+        # 1. 严格判断是否为元数据查询 (/fnmeta)
+        is_meta = any(p == 'fnmeta' for p in parts)
         guid = None
-        
-        for i, p in enumerate(parts):
-            if p in ('fnmeta', 'fnplay', 'v'):
-                action = p
-                if i + 1 < len(parts):
-                    guid = parts[i + 1]
+        for p in parts:
+            if len(p) in (32, 36) or (len(p) >= 20 and not p.endswith(('.mkv', '.mp4', '.rmvb', '.avi', '.ts', '.flv', '.mov')) and p not in ('fnplay', 'fnmeta', 'v')):
+                guid = p
                 break
-        
-        if not action and len(parts) >= 1:
-            # 可能是 Lucky 剥离了前缀直接发来 guid (如 /976d98bc9ca34b4798f696561ceab6c0/xxx.mkv)
-            if len(parts[0]) >= 20:
-                action = 'fnplay'
-                guid = parts[0]
 
-        if action == 'v' and len(parts) >= 3 and parts[1] in ('fnplay', 'fnmeta'):
-            action = parts[1]
-            guid = parts[2]
-
-        print(f"[RESOLVED] action={action} guid={guid}", flush=True)
-
-        # 1. 毫秒级元数据精准查询接口
-        if action == 'fnmeta' and guid:
+        if is_meta and guid:
             file_path, _ = get_media_info(guid)
             title = get_accurate_title(guid, file_path)
             resp = json.dumps({"code": 0, "guid": guid, "title": title}).encode('utf-8')
@@ -168,14 +149,14 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.wfile.write(resp)
             return
 
-        # 2. 高性能播放直推与 302 重定向
-        if action == 'fnplay' and guid:
+        # 2. 视频流直推 (/fnplay/{guid}/filename)
+        if guid:
             file_path, item_guid = get_media_info(guid)
             if not file_path or not os.path.exists(file_path):
                 self.send_error(404, f"Media file not found on disk: guid={guid}")
                 return
 
-            # 如果是 .strm 文件：安全 URL 编码后即时 302 重定向到原生/云端 CDN 链接！
+            # 如果是 .strm 文件：安全 302 重定向到云盘 CDN 直链
             if file_path.lower().endswith('.strm'):
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -193,9 +174,9 @@ class StreamHandler(BaseHTTPRequestHandler):
                     elif os.path.exists(strm_url):
                         file_path = strm_url
                 except Exception as e:
-                    print(f"Error reading strm: {e}")
+                    pass
 
-            # 本地文件多线程高速并发 HTTP 206 流式传输
+            # 本地文件高速并发流式传输
             try:
                 file_size = os.path.getsize(file_path)
                 content_type, _ = mimetypes.guess_type(file_path)
@@ -229,7 +210,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                             f.seek(start)
                             remaining = length
                             while remaining > 0:
-                                chunk_size = min(remaining, 256 * 1024)
+                                chunk_size = min(remaining, 512 * 1024)
                                 data = f.read(chunk_size)
                                 if not data:
                                     break
@@ -246,7 +227,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                     if send_body:
                         with open(file_path, 'rb') as f:
                             while True:
-                                data = f.read(256 * 1024)
+                                data = f.read(512 * 1024)
                                 if not data:
                                     break
                                 self.wfile.write(data)
