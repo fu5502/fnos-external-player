@@ -1,5 +1,5 @@
-﻿#!/bin/bash
-# 飞牛影视第三方播放器注入维护守护进程
+#!/bin/bash
+# 飞牛影视第三方播放器注入维护守护进程 v4.5
 
 # 1. 确保 window.__ug 被导出
 ASSET_JS=$(ls /usr/local/apps/@appcenter/trim.media/static/assets/*YegjoWFd.js 2>/dev/null | head -n 1)
@@ -11,19 +11,27 @@ fi
 
 # 2. 确保 index.html 注入
 HTML1="/usr/local/apps/@appcenter/trim.media/static/index.html"
-if [ -f "$HTML1" ] && ! grep -q "fnExternalPlayer.js" "$HTML1"; then
-    sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=4.4" defer><\/script><\/body>/g' "$HTML1"
+if [ -f "$HTML1" ]; then
+    if grep -q "fnExternalPlayer.js" "$HTML1"; then
+        sed -i 's/fnExternalPlayer\.js\?v=[0-9.]*/fnExternalPlayer.js?v=4.5/g' "$HTML1"
+    else
+        sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=4.5" defer><\/script><\/body>/g' "$HTML1"
+    fi
 fi
 
 HTML2="/usr/trim/www/index.html"
-if [ -f "$HTML2" ] && ! grep -q "fnExternalPlayer.js" "$HTML2"; then
-    sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=4.4" defer><\/script><\/body>/g' "$HTML2"
+if [ -f "$HTML2" ]; then
+    if grep -q "fnExternalPlayer.js" "$HTML2"; then
+        sed -i 's/fnExternalPlayer\.js\?v=[0-9.]*/fnExternalPlayer.js?v=4.5/g' "$HTML2"
+    else
+        sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=4.5" defer><\/script><\/body>/g' "$HTML2"
+    fi
 fi
 
-# 3. 同步脚本文件
-if [ -f "/root/fnExternalPlayer.js" ]; then
-    cp -f /root/fnExternalPlayer.js /usr/local/apps/@appcenter/trim.media/static/static/fnExternalPlayer.js 2>/dev/null
-    cp -f /root/fnExternalPlayer.js /usr/trim/www/static/fnExternalPlayer.js 2>/dev/null
+# 3. 确保前端文件同步
+if [ -f "/usr/local/bin/fnExternalPlayer.js" ]; then
+    cp -f /usr/local/bin/fnExternalPlayer.js /usr/local/apps/@appcenter/trim.media/static/static/fnExternalPlayer.js 2>/dev/null
+    cp -f /usr/local/bin/fnExternalPlayer.js /usr/trim/www/static/fnExternalPlayer.js 2>/dev/null
 fi
 
 # 4. 确保 fn_stream_server 正在运行

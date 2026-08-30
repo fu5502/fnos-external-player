@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 set -e
 
 echo "======================================================="
@@ -42,13 +42,21 @@ fi
 
 # 注入 index.html
 HTML1="/usr/local/apps/@appcenter/trim.media/static/index.html"
-if [ -f "$HTML1" ] && ! grep -q "fnExternalPlayer.js" "$HTML1"; then
-    sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=4.4" defer><\/script><\/body>/g' "$HTML1"
+if [ -f "$HTML1" ]; then
+    if grep -q "fnExternalPlayer.js" "$HTML1"; then
+        sed -i 's/fnExternalPlayer\.js\?v=[0-9.]*/fnExternalPlayer.js?v=4.5/g' "$HTML1"
+    else
+        sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=4.5" defer><\/script><\/body>/g' "$HTML1"
+    fi
 fi
 
 HTML2="/usr/trim/www/index.html"
-if [ -f "$HTML2" ] && ! grep -q "fnExternalPlayer.js" "$HTML2"; then
-    sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=4.4" defer><\/script><\/body>/g' "$HTML2"
+if [ -f "$HTML2" ]; then
+    if grep -q "fnExternalPlayer.js" "$HTML2"; then
+        sed -i 's/fnExternalPlayer\.js\?v=[0-9.]*/fnExternalPlayer.js?v=4.5/g' "$HTML2"
+    else
+        sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=4.5" defer><\/script><\/body>/g' "$HTML2"
+    fi
 fi
 
 echo "[+] 4. 设置持久化定时维护任务 (防系统/应用更新重置)..."

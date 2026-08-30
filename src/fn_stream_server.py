@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-import os, sys, sqlite3, mimetypes, urllib.parse, json
+"""
+飞牛影视（fnOS）Direct Stream 高性能串流网关 v4.5
+- 多线程并发 HTTP 206 流式传输（本地高码率原盘 0 卡顿）
+- 局域网与外网自适应 302 重定向解析（自动将局域网 OpenList strm 解析为公网云端 CDN 直链）
+- RFC 3986 特殊字符安全编码（彻底解决中文与特殊括号导致的 302 报错）
+- 毫秒级元数据精准查询接口 (/fnmeta/{guid}) 与网关连通性检测 (/fnplay/ping)
+"""
+import os, sys, sqlite3, mimetypes, urllib.parse, urllib.request, json
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 DB_PATH = '/usr/local/apps/@appdata/trim.media/database/trimmedia.db'
@@ -64,6 +71,30 @@ def safe_quote_url(url):
     quoted_query = urllib.parse.quote(urllib.parse.unquote(parts.query), safe='=&/:?%+') if parts.query else ''
     return urllib.parse.urlunsplit((parts.scheme, parts.netloc, quoted_path, quoted_query, parts.fragment))
 
+def resolve_strm_target(strm_url):
+    # 如果 STRM 包含私有局域网 IP，NAS 本地代为解析 302 提取公网云盘 CDN 直链
+    is_private_ip = any(strm_url.startswith(f'http://{prefix}') or strm_url.startswith(f'https://{prefix}') 
+                        for prefix in ['192.168.', '10.', '127.', 'localhost', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.'])
+    if is_private_ip:
+        try:
+            req = urllib.request.Request(strm_url, headers={'User-Agent': 'Mozilla/5.0'})
+            class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+                def http_error_302(self, req, fp, code, msg, headers):
+                    return headers
+                http_error_301 = http_error_302
+                http_error_303 = http_error_302
+                http_error_307 = http_error_302
+                http_error_308 = http_error_302
+            opener = urllib.request.build_opener(NoRedirectHandler)
+            res = opener.open(req, timeout=1.5)
+            if hasattr(res, 'get'):
+                loc = res.get('Location')
+                if loc:
+                    return loc
+        except Exception as e:
+            pass
+    return strm_url
+
 class StreamHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
@@ -85,6 +116,18 @@ class StreamHandler(BaseHTTPRequestHandler):
         
         if not parts:
             self.send_error(404)
+            return
+
+        # 0. 连通性检测接口 (/fnplay/ping 或 /ping)
+        if parts[0] in ('ping', 'fnplay') and (len(parts) == 1 or parts[-1].startswith('ping')):
+            resp = b'{"status":"ok","server":"fn_stream_server v4.5"}'
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(resp)))
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            if send_body:
+                self.wfile.write(resp)
             return
 
         # 1. 毫秒级元数据精准查询接口 (/fnmeta/{guid})
@@ -110,13 +153,14 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.send_error(404, "Media file not found on disk")
                 return
 
-            # 如果是 .strm 文件：安全 URL 编码后即时 302 重定向到 OpenList 原生链接！
+            # 如果是 .strm 文件：安全 URL 编码后即时 302 重定向到原生/云端 CDN 链接！
             if file_path.lower().endswith('.strm'):
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         strm_url = f.read().strip()
                     if strm_url.startswith(('http://', 'https://', 'ftp://', 'smb://')):
-                        encoded_url = safe_quote_url(strm_url)
+                        target_url = resolve_strm_target(strm_url)
+                        encoded_url = safe_quote_url(target_url)
                         self.send_response(302)
                         self.send_header('Location', encoded_url)
                         self.send_header('Content-Length', '0')
