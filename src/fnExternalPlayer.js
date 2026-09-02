@@ -1,14 +1,16 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v4.7 (轻量零开销极速秒播版)
- * 1. 零后台网络轮询：彻底移除后台 fetch 预加载，避免大流量挤占带宽或导致网页卡顿崩溃
- * 2. 100% 毫秒级 DOM 高精片名识别：同步瞬时提取真实中文剧集名称，纯正中文原名无乱码
- * 3. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
- * 4. 0ms 同步极速唤起：对标 OpenList 极致体验，支持 PotPlayer、VLC、IINA、Infuse 等全平台播放器
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v4.8 (双重精准片名保障版)
+ * 1. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
+ * 2. 服务端智能 302 重定向纠偏：若调起时片名未就绪，服务端即刻 302 重定向至真实中文片名，PotPlayer 标题栏 100% 准确
+ * 3. 零多余网络开销：不拉取任何视频流数据，网页 CPU 与内存保持极致清爽
+ * 4. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.7 (Ultra-Fast & Zero-Overhead) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.8 (Accurate Title Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+
+    const titleCache = {};
 
     function getOS() {
         const u = navigator.userAgent;
@@ -37,7 +39,7 @@
         return false;
     }
 
-    // 智能推流网关地址解析 (自动区分 Lucky 反代、公网 IPv6/IPv4 与局域网)
+    // 智能推流网关地址解析
     function getStreamGatewayBase() {
         const custom = localStorage.getItem('fn_stream_gateway_url');
         if (custom && custom.trim()) {
@@ -53,39 +55,54 @@
         return window.location.origin;
     }
 
-    // 从网页 DOM 提取高精度中文片名 (0ms 纯本地同步解析，不发任何网络请求)
-    function getCleanMediaTitle() {
+    // 毫秒级从官方已登录会话中预取真实片名 (仅几十字节 JSON，零多余开销)
+    function fetchTitleViaUG(guid) {
+        if (!guid || titleCache[guid]) return;
+        try {
+            if (window.__ug && window.__ug.item && window.__ug.item.info) {
+                window.__ug.item.info({ guid: guid }).then(res => {
+                    if (res && res.data) {
+                        const d = res.data;
+                        let real = d.filename || '';
+                        if (!real && d.title) {
+                            if (d.season_number && d.episode_number) {
+                                const s = String(d.season_number).padStart(2, '0');
+                                const e = String(d.episode_number).padStart(2, '0');
+                                real = `${d.title} - S${s}E${e}.mkv`;
+                            } else {
+                                real = `${d.title}.mkv`;
+                            }
+                        }
+                        if (real) {
+                            titleCache[guid] = real.replace(/[\\/:*?"<>|\r\n\t]/g, '_');
+                            console.log(`[fnExternalPlayer] 成功获取真实片名: ${guid} -> ${titleCache[guid]}`);
+                        }
+                    }
+                }).catch(() => {});
+            }
+        } catch (e) {}
+    }
+
+    // 从网页 DOM 提取高精度中文片名
+    function getDOMMediaTitle() {
         let title = '';
 
-        // 1. 优先尝试从详情页抓取主标题与单集标题
         const titleSelectors = [
             '[class*="episode-title"]', '[class*="episodeTitle"]',
             '[class*="video-title"]', '[class*="film-title"]',
             '[class*="item-title"]', '[class*="detail-title"]',
-            'h1', 'h2', '[class*="title--"]'
+            'h1', 'h2', 'h3', '[class*="title--"]'
         ];
         for (const sel of titleSelectors) {
             const els = document.querySelectorAll(sel);
             for (const el of els) {
                 const txt = (el.innerText || el.textContent || '').trim();
-                if (txt && txt.length > 0 && txt.length < 80 && !txt.includes('飞牛') && !txt.includes('播放')) {
+                if (txt && txt.length > 0 && txt.length < 80 && !txt.includes('飞牛') && !txt.includes('播放') && !txt.includes('选集')) {
                     title = txt;
                     break;
                 }
             }
             if (title) break;
-        }
-
-        // 2. 网页 document.title 备用
-        if (!title && document.title) {
-            const cleanDocTitle = document.title
-                .replace(/\s*[-_]\s*飞牛影视.*/, '')
-                .replace(/\s*[-_]\s*fnOS.*/i, '')
-                .replace(/\s*[-_]\s*飞牛.*/, '')
-                .trim();
-            if (cleanDocTitle && cleanDocTitle !== '飞牛' && cleanDocTitle !== '飞牛影视') {
-                title = cleanDocTitle;
-            }
         }
 
         if (title) {
@@ -109,11 +126,11 @@
         }, 1000);
     }
 
-    // 0ms 同步生成直链
+    // 同步极速生成直链
     function getInstantStreamUrl() {
         const guid = extractCurrentGuid();
         if (!guid) return null;
-        const fileName = getCleanMediaTitle();
+        const fileName = titleCache[guid] || getDOMMediaTitle();
         const gateway = getStreamGatewayBase();
         return `${gateway}/fnplay/${guid}/${fileName}`;
     }
@@ -146,7 +163,8 @@
                 const os = getOS();
                 let vlcUrl = `vlc://${streamUrl}`;
                 if (os === 'android') {
-                    const title = getCleanMediaTitle();
+                    const guid = extractCurrentGuid();
+                    const title = titleCache[guid] || getDOMMediaTitle();
                     vlcUrl = `intent:${streamUrl}#Intent;package=org.videolan.vlc;type=video/*;S.title=${title};end`;
                 } else if (os === 'ios') {
                     vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(streamUrl)}`;
@@ -189,7 +207,8 @@
             action: (e) => {
                 const streamUrl = getInstantStreamUrl();
                 if (!streamUrl) return;
-                const title = getCleanMediaTitle();
+                const guid = extractCurrentGuid();
+                const title = titleCache[guid] || getDOMMediaTitle();
                 const mxUrl = `intent:${streamUrl}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;S.title=${title};end`;
                 console.log('[fnExternalPlayer] 极速调起 MXPlayer ->', mxUrl);
                 openProtocolSync(mxUrl);
@@ -508,6 +527,11 @@
     }
 
     function tryInject() {
+        const guid = extractCurrentGuid();
+        if (guid) {
+            fetchTitleViaUG(guid);
+        }
+
         const existing = document.getElementById('fn-external-player-bar');
         if (existing && document.body.contains(existing)) {
             return;

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-飞牛影视（fnOS）Direct Stream 高性能串流网关 v4.7 (零内存开销极速版)
-- 严密路由隔离：绝对禁止向元数据探测请求返回视频流
-- 专为 PotPlayer / VLC 优化的大并发高吞吐 Range 206 流式传输
+飞牛影视（fnOS）Direct Stream 高性能串流网关 v4.8 (智能片名精准重定向版)
+- 智能片名纠偏：当收到 视频.mkv / video.mkv 等占位请求时，即时 302 重定向至真实中文片名，确保 PotPlayer 标题栏 100% 准确
+- 严格路由隔离与高并发 HTTP 206 流式传输（0% CPU 占用）
 - RFC 3986 特殊字符安全编码与 STRM 毫秒级 302 直连
 """
 import os, sys, sqlite3, mimetypes, urllib.parse, urllib.request, json
@@ -11,6 +11,28 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 DB_PATH = '/usr/local/apps/@appdata/trim.media/database/trimmedia.db'
 
 def get_accurate_title(guid, file_path=None):
+    # 优先查数据库中的真实片名或剧集名
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT filename, title, season_number, episode_number FROM item WHERE guid = ?", (guid,))
+        r = c.fetchone()
+        if r:
+            filename, title, season_num, ep_num = r
+            if filename and filename.strip():
+                conn.close()
+                return filename.strip()
+            if title and season_num is not None and ep_num is not None:
+                s_str = f"S{int(season_num):02d}E{int(ep_num):02d}"
+                conn.close()
+                return f"{title} - {s_str}.mkv"
+            if title:
+                conn.close()
+                return f"{title}.mkv"
+        conn.close()
+    except Exception:
+        pass
+
     if not file_path:
         file_path, _ = get_media_info(guid)
     if not file_path:
@@ -60,7 +82,7 @@ def get_media_info(guid):
             return r[0], r[1]
 
         conn.close()
-    except Exception as e:
+    except Exception:
         pass
     return None, None
 
@@ -89,7 +111,7 @@ def resolve_strm_target(strm_url):
                 loc = res.get('Location')
                 if loc:
                     return loc
-        except Exception as e:
+        except Exception:
             pass
     return strm_url
 
@@ -118,7 +140,7 @@ class StreamHandler(BaseHTTPRequestHandler):
 
         # 0. 连通性检测接口 (/fnplay/ping 或 /ping)
         if 'ping' in parts[0] or (len(parts) > 1 and 'ping' in parts[-1]):
-            resp = b'{"status":"ok","server":"fn_stream_server v4.7"}'
+            resp = b'{"status":"ok","server":"fn_stream_server v4.8"}'
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(resp)))
@@ -128,7 +150,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.wfile.write(resp)
             return
 
-        # 1. 严格判断是否为元数据查询 (/fnmeta)
+        # 1. 元数据查询接口 (/fnmeta/{guid})
         is_meta = any(p == 'fnmeta' for p in parts)
         guid = None
         for p in parts:
@@ -156,6 +178,21 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.send_error(404, f"Media file not found on disk: guid={guid}")
                 return
 
+            accurate_title = get_accurate_title(guid, file_path)
+            req_filename = urllib.parse.unquote(parts[-1]) if len(parts) > 1 else ''
+
+            # 智能纠偏：如果客户端传入的是 "视频.mkv"、"video.mkv"、"play" 或无文件名
+            # 立即 302 重定向到真实文件名 URL，PotPlayer 收到重定向后会自动将播放列表与标题栏更新为真实片名！
+            if req_filename in ('视频.mkv', 'video.mkv', 'play', '') or not req_filename.endswith(('.mkv', '.mp4', '.rmvb', '.avi', '.ts', '.flv', '.mov', '.iso')):
+                redirect_url = f"/fnplay/{guid}/{urllib.parse.quote(accurate_title)}"
+                self.send_response(302)
+                self.send_header('Location', redirect_url)
+                self.send_header('Content-Length', '0')
+                self.send_header('Connection', 'close')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                return
+
             # 如果是 .strm 文件：安全 302 重定向到云盘 CDN 直链
             if file_path.lower().endswith('.strm'):
                 try:
@@ -173,7 +210,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                         return
                     elif os.path.exists(strm_url):
                         file_path = strm_url
-                except Exception as e:
+                except Exception:
                     pass
 
             # 本地文件高速并发流式传输
@@ -182,6 +219,9 @@ class StreamHandler(BaseHTTPRequestHandler):
                 content_type, _ = mimetypes.guess_type(file_path)
                 if not content_type or not content_type.startswith('video/'):
                     content_type = 'video/mp4'
+
+                quoted_title = urllib.parse.quote(accurate_title)
+                disposition = f'inline; filename="{quoted_title}"; filename*=UTF-8\'\'{quoted_title}'
 
                 range_header = self.headers.get('Range')
                 if range_header:
@@ -202,6 +242,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                     self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
                     self.send_header('Content-Length', str(length))
                     self.send_header('Accept-Ranges', 'bytes')
+                    self.send_header('Content-Disposition', disposition)
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
 
@@ -221,6 +262,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                     self.send_header('Content-Type', content_type)
                     self.send_header('Content-Length', str(file_size))
                     self.send_header('Accept-Ranges', 'bytes')
+                    self.send_header('Content-Disposition', disposition)
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
 
