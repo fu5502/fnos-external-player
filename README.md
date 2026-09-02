@@ -4,7 +4,7 @@
 
 **为飞牛 OS (fnOS) 飞牛影视 (`trim.media`) 打造的服务端免插件注入增强工具**
 
-[![GitHub Release](https://img.shields.io/badge/Release-v4.6-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
+[![GitHub Release](https://img.shields.io/badge/Release-v4.8-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-fnOS%20%7C%20Linux%20x86__64-orange.svg?style=flat-square)](https://www.fnnas.com/)
 [![Supported Players](https://img.shields.io/badge/Players-PotPlayer%20%7C%20VLC%20%7C%20IINA%20%7C%20Infuse%20%7C%20MPV-purple.svg?style=flat-square)](#-支持的外部播放器矩阵)
@@ -185,6 +185,13 @@ A: 不会。系统内置了自动守护进程 `fn_player_daemon.sh`，每分钟�
 
 ## 📝 更新日志
 
+* **v4.8 (2026-09-02)**
+  * 🏷️ **双重精准片名保障机制**：彻底解决外部播放器片名偶尔显示为 `视频.mkv` 的问题；
+  * ⚡ **官方会话毫秒级提取**：利用飞牛官方全局接口 `window.__ug.item.info` 毫秒级提取剧集正式中文原名；
+  * 🔄 **服务端智能 302 重定向纠偏**：若调起时片名未就绪，服务端即刻通过媒体库数据库 302 重定向至真实中文片名，播放列表与窗口标题 100% 准确；
+* **v4.7 (2026-08-30)**
+  * 🚀 **彻底移除后台轮询与网络开销**：消除由于反代前缀误判导致的后台循环大流量拉取与网页内存溢出崩溃问题；
+  * 📦 **增大流媒体并发传输缓冲区**：缓冲区由 256KB 提升至 512KB，显著提升外网原盘高码率串流与进度拖拽响应；
 * **v4.6 (2026-08-30)**
   * 🌐 **Lucky 反代与纯 IPv6 全自适应**：外网通过 Lucky 反代（如 `https://fntv.zyweb.top:8443`）访问时自动复用相同 origin，配合 Lucky 子规则实现零多开端口播放；
   * ⚙️ **可视化网关配置向导**：弹窗中提供针对 Lucky / IPv6 的一键设置说明与网络测速；
