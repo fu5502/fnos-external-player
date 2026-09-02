@@ -9,7 +9,7 @@
 [![Platform](https://img.shields.io/badge/Platform-fnOS%20%7C%20Linux%20x86__64-orange.svg?style=flat-square)](https://www.fnnas.com/)
 [![Supported Players](https://img.shields.io/badge/Players-PotPlayer%20%7C%20VLC%20%7C%20IINA%20%7C%20Infuse%20%7C%20MPV-purple.svg?style=flat-square)](#-支持的外部播放器矩阵)
 
-[功能特性](#-功能特性) • [效果预览](#-效果预览) • [一键安装](#-一键安装) • [Lucky 与纯 IPv6 配置向导](#-lucky--纯-ipv6-反代配置向导无需额外端口) • [播放器矩阵](#-支持的外部播放器矩阵) • [系统架构](#-核心架构与技术突破) • [常见问题](#-常见问题-faq) • [更新日志](#-更新日志)
+[功能特性](#-功能特性) • [效果预览](#-效果预览) • [一键安装](#-一键安装) • [一键卸载](#-一键卸载) • [Lucky 与纯 IPv6 配置向导](#-lucky--纯-ipv6-反代配置向导无需额外端口) • [播放器矩阵](#-支持的外部播放器矩阵) • [系统架构](#-核心架构与技术突破) • [常见问题](#-常见问题-faq) • [更新日志](#-更新日志)
 
 </div>
 
@@ -66,6 +66,18 @@ curl -fsSL https://raw.githubusercontent.com/fu5502/fnos-external-player/main/in
 ```
 
 安装完成后，打开浏览器访问飞牛影视，按 `Ctrl + F5` 强制刷新页面即可看到外部播放器工具栏！
+
+---
+
+## 🗑️ 一键卸载
+
+若需完全移除本插件并恢复飞牛影视官方纯净状态，在终端中以 `sudo` 运行以下命令即可全自动一键卸载：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fu5502/fnos-external-player/main/uninstall.sh | sudo bash
+```
+
+> **说明**：卸载脚本会自动停止并删除后台服务、清理定时任务守护、删除注入脚本并还原前端 `index.html`，无需手动清理任何残留。卸载后按 `Ctrl + F5` 刷新网页即可恢复官方原生界面。
 
 ---
 
