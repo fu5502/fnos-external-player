@@ -1,14 +1,14 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v4.9 (双重精准片名保障版)
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v5.0 (紧凑防换行双重精准片名版)
  * 1. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
  * 2. 服务端智能 302 重定向纠偏：若调起时片名未就绪，服务端即刻 302 重定向至真实中文片名，PotPlayer 标题栏 100% 准确
- * 3. 零多余网络开销：不拉取任何视频流数据，网页 CPU 与内存保持极致清爽
+ * 3. 紧凑单行防换行排版：尺寸缩小适配各种分辨率，禁止换行，视觉高度与按钮对齐
  * 4. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.9 (Accurate Title Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v5.0 (Compact Single-Row Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     const titleCache = {};
 
@@ -435,54 +435,65 @@
         const bar = document.createElement('div');
         bar.id = 'fn-external-player-bar';
         bar.style.cssText = `
-            display: flex;
-            flex-wrap: wrap;
+            display: inline-flex;
+            flex-wrap: nowrap;
+            white-space: nowrap;
             align-items: center;
-            gap: 8px;
-            margin: 14px 0 18px 0;
-            padding: 10px 14px;
-            background: rgba(30, 30, 35, 0.75);
+            gap: 5px;
+            margin: 6px 0;
+            padding: 4px 8px;
+            background: rgba(28, 28, 33, 0.85);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 10px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
             z-index: 999;
             width: fit-content;
+            max-width: 100%;
+            overflow-x: auto;
+            scrollbar-width: none;
+            box-sizing: border-box;
         `;
 
         const titleLabel = document.createElement('span');
-        titleLabel.innerText = '外部播放器:';
+        titleLabel.innerText = '外部播放:';
         titleLabel.style.cssText = `
             color: rgba(255, 255, 255, 0.85);
-            font-size: 13px;
-            font-weight: 600;
-            margin-right: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-right: 2px;
             user-select: none;
+            white-space: nowrap;
+            flex-shrink: 0;
         `;
         bar.appendChild(titleLabel);
 
         Players.forEach(p => {
             const btn = document.createElement('button');
             btn.id = p.id;
-            btn.innerHTML = `<span style="font-size:12px; margin-right:4px;">${p.icon}</span><span>${p.name}</span>`;
+            btn.innerHTML = `<span style="font-size:11px; margin-right:3px;">${p.icon}</span><span>${p.name}</span>`;
             btn.style.cssText = `
                 background: ${p.color};
                 color: #ffffff;
                 border: none;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-size: 13px;
+                border-radius: 4px;
+                padding: 3px 7px;
+                font-size: 12px;
                 font-weight: 500;
+                line-height: 1.35;
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
-                transition: transform 0.15s ease, filter 0.15s ease;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+                transition: transform 0.12s ease, filter 0.12s ease;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.25);
                 user-select: none;
+                white-space: nowrap;
+                flex-shrink: 0;
+                box-sizing: border-box;
             `;
             btn.onmouseenter = () => {
-                btn.style.filter = 'brightness(1.15)';
+                btn.style.filter = 'brightness(1.18)';
                 btn.style.transform = 'translateY(-1px)';
             };
             btn.onmouseleave = () => {
