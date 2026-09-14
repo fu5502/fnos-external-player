@@ -1,5 +1,5 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v4.8 (双重精准片名保障版)
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v4.9 (双重精准片名保障版)
  * 1. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
  * 2. 服务端智能 302 重定向纠偏：若调起时片名未就绪，服务端即刻 302 重定向至真实中文片名，PotPlayer 标题栏 100% 准确
  * 3. 零多余网络开销：不拉取任何视频流数据，网页 CPU 与内存保持极致清爽
@@ -8,7 +8,7 @@
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.8 (Accurate Title Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v4.9 (Accurate Title Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     const titleCache = {};
 
