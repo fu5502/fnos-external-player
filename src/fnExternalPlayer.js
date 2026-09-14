@@ -1,14 +1,15 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v5.0 (紧凑防换行双重精准片名版)
- * 1. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
- * 2. 服务端智能 302 重定向纠偏：若调起时片名未就绪，服务端即刻 302 重定向至真实中文片名，PotPlayer 标题栏 100% 准确
- * 3. 紧凑单行防换行排版：尺寸缩小适配各种分辨率，禁止换行，视觉高度与按钮对齐
- * 4. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v5.1 (播放详情页精准识别与单页自愈版)
+ * 1. 严格详情页守卫：仅在电影/剧集播放详情页挂载组件，主页、媒体库列表等自动清理不显示
+ * 2. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
+ * 3. 服务端智能 302 重定向纠偏：若调起时片名未就绪，服务端即刻 302 重定向至真实中文片名
+ * 4. 紧凑单行防换行排版：尺寸缩小适配各种分辨率，禁止换行，视觉高度与按钮对齐
+ * 5. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v5.0 (Compact Single-Row Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v5.1 (Detail-Only Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     const titleCache = {};
 
@@ -24,13 +25,38 @@
 
     function extractCurrentGuid() {
         const hash = window.location.hash || '';
-        const hashMatch = hash.match(/([a-f0-9]{20,64}|[a-zA-Z0-9_-]{20,64})/i);
+        // 严格匹配 32 位的十六进制媒体 GUID
+        const hashMatch = hash.match(/([a-f0-9]{32})/i);
         if (hashMatch) return hashMatch[1];
 
-        const pathMatch = window.location.pathname.match(/([a-f0-9]{20,64}|[a-zA-Z0-9_-]{20,64})/i);
+        const pathMatch = window.location.pathname.match(/([a-f0-9]{32})/i);
         if (pathMatch) return pathMatch[1];
 
         return '';
+    }
+
+    // 判断当前是否处于电影或电视剧详情/播放页面
+    function isMediaDetailPage() {
+        const hash = (window.location.hash || '').toLowerCase();
+        const path = (window.location.pathname || '').toLowerCase();
+
+        // 1. 明确排除主页、列表页、设置、搜索等非媒体详情路由
+        if (!hash || hash === '#' || hash === '#/' || hash.startsWith('#/home') || hash.startsWith('#/index')) {
+            if (!path.includes('/movie/') && !path.includes('/tv/') && !path.includes('/detail/') && !path.includes('/episode/')) {
+                return false;
+            }
+        }
+        if (hash.startsWith('#/library') || hash.startsWith('#/favorite') || hash.startsWith('#/collection') || hash.startsWith('#/setting') || hash.startsWith('#/search') || hash.startsWith('#/channel')) {
+            return false;
+        }
+
+        // 2. 必须具备合法的 32 位十六进制媒体 GUID
+        const guid = extractCurrentGuid();
+        if (!guid || !/^[a-f0-9]{32}$/i.test(guid)) {
+            return false;
+        }
+
+        return true;
     }
 
     function isPrivateHost(hostname) {
@@ -511,11 +537,12 @@
     }
 
     function findTargetContainer() {
+        // 1. 优先寻找影视详情页主播放按钮组（“播放”、“继续播放”、“立即播放”）
         const buttons = Array.from(document.querySelectorAll('button, [role="button"], .semi-button, a'));
         for (const btn of buttons) {
             if (btn.id && btn.id.startsWith('fn-btn-')) continue;
             const txt = (btn.innerText || btn.textContent || '').trim();
-            if ((txt.includes('继续播放') || txt === '播放' || txt.includes('立即播放')) && txt.length < 15) {
+            if ((txt === '播放' || txt === '继续播放' || txt === '立即播放' || txt.includes('继续播放') || txt.includes('立即播放')) && txt.length < 15) {
                 let parent = btn.parentElement;
                 while (parent && parent.children.length === 1 && parent !== document.body) {
                     parent = parent.parentElement;
@@ -524,10 +551,12 @@
             }
         }
 
+        // 2. 备选：查找影视规格标签（严格全等匹配 1080P、4K、SDR 等独立徽章，绝不误伤如 CCTV4K 等频道/标题名称）
         const tags = Array.from(document.querySelectorAll('div, span, button'));
+        const specBadges = ['1080P', '4K', '720P', '2160P', 'SDR', 'HDR', 'HDR10', 'DOLBY', '杜比视界'];
         for (const tag of tags) {
-            const txt = (tag.innerText || tag.textContent || '').trim();
-            if ((txt.includes('1080P') || txt.includes('4K') || txt.includes('720P') || txt.includes('SDR') || txt.includes('HDR')) && txt.length < 20) {
+            const txt = (tag.innerText || tag.textContent || '').trim().toUpperCase();
+            if (specBadges.includes(txt)) {
                 if (tag.children.length === 0 && tag.parentElement) {
                     return tag.parentElement;
                 }
@@ -538,19 +567,39 @@
     }
 
     function tryInject() {
-        const guid = extractCurrentGuid();
-        if (guid) {
-            fetchTitleViaUG(guid);
+        const existing = document.getElementById('fn-external-player-bar');
+
+        // 核心守卫：若非电影/电视剧详情播放页，必须立刻彻底从页面 DOM 移除，绝不在首页残留
+        if (!isMediaDetailPage()) {
+            if (existing) {
+                existing.remove();
+            }
+            return;
         }
 
-        const existing = document.getElementById('fn-external-player-bar');
-        if (existing && document.body.contains(existing)) {
+        const guid = extractCurrentGuid();
+        if (!guid) {
+            if (existing) {
+                existing.remove();
+            }
             return;
+        }
+
+        fetchTitleViaUG(guid);
+
+        // 如果页面上已有组件且对应当前影片，避免重复创建
+        if (existing && document.body.contains(existing)) {
+            if (existing.dataset.guid === guid) {
+                return;
+            }
+            // 单页应用切换了不同的影视，移除旧组件重新挂载
+            existing.remove();
         }
 
         const target = findTargetContainer();
         if (target) {
             const bar = createPlayerBar();
+            bar.dataset.guid = guid;
             if (target.nextSibling) {
                 target.parentNode.insertBefore(bar, target.nextSibling);
             } else {

@@ -1,5 +1,5 @@
 #!/bin/bash
-# 飞牛影视第三方播放器注入维护守护进程 v5.0
+# 飞牛影视第三方播放器注入维护守护进程 v5.1
 
 # 1. 确保 window.__ug 被导出 (动态匹配 new ic(，兼容所有版本打包 hash)
 ASSET_JS=$(grep -l "new ic(" /usr/local/apps/@appcenter/trim.media/static/assets/*.js 2>/dev/null | head -n 1 || true)
@@ -13,18 +13,18 @@ fi
 HTML1="/usr/local/apps/@appcenter/trim.media/static/index.html"
 if [ -f "$HTML1" ]; then
     if grep -q "fnExternalPlayer.js" "$HTML1"; then
-        sed -i 's/fnExternalPlayer\.js?v=[0-9.]*/fnExternalPlayer.js?v=5.0/g' "$HTML1"
+        sed -i 's/fnExternalPlayer\.js?v=[0-9.]*/fnExternalPlayer.js?v=5.1/g' "$HTML1"
     else
-        sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=5.0" defer><\/script><\/body>/g' "$HTML1"
+        sed -i 's/<\/body>/<script src="\/v\/static\/fnExternalPlayer.js?v=5.1" defer><\/script><\/body>/g' "$HTML1"
     fi
 fi
 
 HTML2="/usr/trim/www/index.html"
 if [ -f "$HTML2" ]; then
     if grep -q "fnExternalPlayer.js" "$HTML2"; then
-        sed -i 's/fnExternalPlayer\.js?v=[0-9.]*/fnExternalPlayer.js?v=5.0/g' "$HTML2"
+        sed -i 's/fnExternalPlayer\.js?v=[0-9.]*/fnExternalPlayer.js?v=5.1/g' "$HTML2"
     else
-        sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=5.0" defer><\/script><\/body>/g' "$HTML2"
+        sed -i 's/<\/body>/<script src="\/static\/fnExternalPlayer.js?v=5.1" defer><\/script><\/body>/g' "$HTML2"
     fi
 fi
 
