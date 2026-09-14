@@ -4,7 +4,7 @@
 
 **为飞牛 OS (fnOS) 飞牛影视 (`trim.media`) 打造的服务端免插件注入增强工具**
 
-[![GitHub Release](https://img.shields.io/badge/Release-v4.8-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
+[![GitHub Release](https://img.shields.io/badge/Release-v4.9-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-fnOS%20%7C%20Linux%20x86__64-orange.svg?style=flat-square)](https://www.fnnas.com/)
 [![Supported Players](https://img.shields.io/badge/Players-PotPlayer%20%7C%20VLC%20%7C%20IINA%20%7C%20Infuse%20%7C%20MPV-purple.svg?style=flat-square)](#-支持的外部播放器矩阵)
@@ -197,6 +197,10 @@ A: 不会。系统内置了自动守护进程 `fn_player_daemon.sh`，每分钟�
 
 ## 📝 更新日志
 
+* **v4.9 (2026-09-14)**
+  * 🛡️ **应用升级全自动无损自愈增强**：针对飞牛影视应用更新后 Vite 打包 Hash 变动问题，改为动态模式智能匹配并导出 `window.__ug`；
+  * 📁 **目录容错加固**：守护进程与安装流程中加入静态目录自动重建机制，彻底解决应用重新打包清空目录导致的写入失败；
+  * ⏰ **Crontab 规范修复**：严格对齐 Debian 系统 `/etc/cron.d/` 换行规范，确保开机与每 10 分钟定时自愈百分百生效；
 * **v4.8 (2026-09-02)**
   * 🏷️ **双重精准片名保障机制**：彻底解决外部播放器片名偶尔显示为 `视频.mkv` 的问题；
   * ⚡ **官方会话毫秒级提取**：利用飞牛官方全局接口 `window.__ug.item.info` 毫秒级提取剧集正式中文原名；
