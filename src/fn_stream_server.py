@@ -6,10 +6,11 @@
 - 严格路由隔离与高并发 HTTP 206 流式传输（0% CPU 占用）
 - STRM 毫秒级 302 直连云盘顶级 CDN
 """
-import os, sys, sqlite3, mimetypes, urllib.parse, urllib.request, json
+import os, sys, sqlite3, mimetypes, urllib.parse, urllib.request, json, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 DB_PATH = '/usr/local/apps/@appdata/trim.media/database/trimmedia.db'
+STRM_TARGET_CACHE = {}  # { strm_url: (resolved_url, expire_time) }
 
 def get_accurate_title(guid, file_path=None):
     # 优先查数据库中的真实片名或剧集名
@@ -113,11 +114,18 @@ def safe_quote_url(url):
         return url
 
 def resolve_strm_target(strm_url):
+    now = time.time()
+    cached = STRM_TARGET_CACHE.get(strm_url)
+    if cached and cached[1] > now:
+        return cached[0]
+
     is_private_ip = any(strm_url.startswith(f'http://{prefix}') or strm_url.startswith(f'https://{prefix}')
                         for prefix in ['192.168.', '10.', '127.', 'localhost', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.'])
+    target_url = strm_url
     if is_private_ip:
         try:
-            req = urllib.request.Request(strm_url, headers={'User-Agent': 'Mozilla/5.0'})
+            # 采用 Range: bytes=0-0 探测 302 重定向，避免误触发全量下载导致几秒甚至几十秒阻塞
+            req = urllib.request.Request(strm_url, headers={'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-0'})
             class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
                 def http_error_302(self, req, fp, code, msg, headers):
                     return headers
@@ -126,14 +134,16 @@ def resolve_strm_target(strm_url):
                 http_error_307 = http_error_302
                 http_error_308 = http_error_302
             opener = urllib.request.build_opener(NoRedirectHandler)
-            res = opener.open(req, timeout=5.0)
-            if hasattr(res, 'get'):
-                loc = res.get('Location')
+            with opener.open(req, timeout=3.0) as res:
+                loc = res.get('Location') if hasattr(res, 'get') else getattr(res, 'headers', {}).get('Location')
                 if loc:
-                    return urllib.parse.urljoin(strm_url, loc)
+                    target_url = urllib.parse.urljoin(strm_url, loc)
         except Exception:
             pass
-    return strm_url
+
+    # 缓存 10 分钟 (600秒)，高并发多线程下毫秒级直接命中
+    STRM_TARGET_CACHE[strm_url] = (target_url, now + 600)
+    return target_url
 
 class StreamHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -356,8 +366,9 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.end_headers()
 
                 if send_body:
+                    # 64KB 极速小块推流，首包延迟趋近于 0，秒级起播
                     while True:
-                        chunk = resp.read(512 * 1024)
+                        chunk = resp.read(64 * 1024)
                         if not chunk:
                             break
                         self.wfile.write(chunk)
