@@ -87,6 +87,20 @@ def get_media_info(guid):
         pass
     return None, None
 
+def is_private_host(hostname):
+    if not hostname or hostname in ('localhost', '127.0.0.1', '::1'):
+        return True
+    if hostname.startswith(('192.168.', '10.')):
+        return True
+    if hostname.startswith('172.'):
+        try:
+            sec = int(hostname.split('.')[1])
+            if 16 <= sec <= 31:
+                return True
+        except Exception:
+            pass
+    return False
+
 def safe_quote_url(url):
     try:
         parts = urllib.parse.urlsplit(url)
@@ -199,13 +213,25 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-            # 如果是 .strm 文件：安全 302 重定向到云盘 CDN 直链
+            # 如果是 .strm 文件：
             if file_path.lower().endswith('.strm'):
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         strm_url = f.read().strip()
                     if strm_url.startswith(('http://', 'https://', 'ftp://', 'smb://')):
                         target_url = resolve_strm_target(strm_url)
+                        target_parsed = urllib.parse.urlsplit(target_url)
+
+                        # 1. 若最终目标是内网私有 IP（例如 OpenList 192.168.99.3:5255 本地中继模式）：
+                        #    若 302 重定向给客户端，OpenList /d 路由会因拒绝 HEAD 请求返回 403 Forbidden（PotPlayer 报错）；
+                        #    且外网环境下客户端无法访问内网 IP。
+                        #    因此：由 5668 网关代为无损中继推流，完美响应 HEAD 探测与 HTTP 206 断点续传！
+                        if is_private_host(target_parsed.hostname):
+                            self.proxy_remote_stream(target_url, accurate_title, send_body=send_body)
+                            return
+
+                        # 2. 若目标是公网云盘顶级 CDN（例如天翼云 ctyunxs.cn、阿里云 OSS、115）：
+                        #    直接 302 重定向，享受千兆 CDN 直出与 0% NAS 负载！
                         encoded_url = safe_quote_url(target_url)
                         self.send_response(302)
                         self.send_header('Location', encoded_url)
@@ -284,6 +310,62 @@ class StreamHandler(BaseHTTPRequestHandler):
             return
 
         self.send_error(404, "Invalid request path")
+
+    def proxy_remote_stream(self, remote_url, accurate_title, send_body=True):
+        try:
+            req_headers = {'User-Agent': 'Mozilla/5.0'}
+            range_header = self.headers.get('Range')
+            if range_header:
+                req_headers['Range'] = range_header
+            elif not send_body: # HEAD 请求探针
+                req_headers['Range'] = 'bytes=0-0'
+
+            req = urllib.request.Request(remote_url, headers=req_headers)
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                resp_headers = resp.headers
+                content_range = resp_headers.get('Content-Range')
+                content_length = resp_headers.get('Content-Length')
+                content_type = resp_headers.get('Content-Type') or 'video/mp4'
+
+                quoted_title = urllib.parse.quote(accurate_title)
+                disposition = f'inline; filename="{quoted_title}"; filename*=UTF-8\'\'{quoted_title}'
+
+                if not send_body and not range_header and content_range:
+                    # 响应播放器的 HEAD 探测请求
+                    total_size = content_range.split('/')[-1] if '/' in content_range else content_length
+                    self.send_response(200)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Content-Length', str(total_size))
+                    self.send_header('Accept-Ranges', 'bytes')
+                    self.send_header('Content-Disposition', disposition)
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    return
+
+                # GET 带有 Range 或普通 GET
+                status_code = resp.status
+                self.send_response(status_code)
+                if content_range:
+                    self.send_header('Content-Range', content_range)
+                if content_length:
+                    self.send_header('Content-Length', content_length)
+                self.send_header('Content-Type', content_type)
+                self.send_header('Accept-Ranges', 'bytes')
+                self.send_header('Content-Disposition', disposition)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+
+                if send_body:
+                    while True:
+                        chunk = resp.read(512 * 1024)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:
+            sys.stderr.write(f"Proxy error on path {self.path} (Range: {self.headers.get('Range')}): {e}\n")
+            sys.stderr.flush()
 
     def log_message(self, format, *args):
         pass
