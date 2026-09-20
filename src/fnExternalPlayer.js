@@ -1,15 +1,16 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v5.1 (播放详情页精准识别与单页自愈版)
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v5.2 (云盘预签名直链保护与详情页精准守卫版)
  * 1. 严格详情页守卫：仅在电影/剧集播放详情页挂载组件，主页、媒体库列表等自动清理不显示
- * 2. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
- * 3. 服务端智能 302 重定向纠偏：若调起时片名未就绪，服务端即刻 302 重定向至真实中文片名
- * 4. 紧凑单行防换行排版：尺寸缩小适配各种分辨率，禁止换行，视觉高度与按钮对齐
- * 5. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
+ * 2. 保护云盘预签名参数：直连云盘顶级 CDN，绝不篡改 HMAC 签名参数，0% 转码原画秒播
+ * 3. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
+ * 4. 服务端智能 302 重定向纠偏：若调起时片名未就绪，服务端即刻 302 重定向至真实中文片名
+ * 5. 紧凑单行防换行排版：尺寸缩小适配各种分辨率，禁止换行，视觉高度与按钮对齐
+ * 6. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v5.1 (Detail-Only Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v5.2 (Cloud Presigned URL Safe Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     const titleCache = {};
 

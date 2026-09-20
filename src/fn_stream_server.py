@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-飞牛影视（fnOS）Direct Stream 高性能串流网关 v4.8 (智能片名精准重定向版)
+飞牛影视（fnOS）Direct Stream 高性能串流网关 v5.2 (云盘预签名直链保护版)
+- 保护云盘 HMAC 预签名参数：严禁二次编解码 query 字符串，确保 S3 / OSS / 天翼云盘等 302 直链绝不报 403 Forbidden
 - 智能片名纠偏：当收到 视频.mkv / video.mkv 等占位请求时，即时 302 重定向至真实中文片名，确保 PotPlayer 标题栏 100% 准确
 - 严格路由隔离与高并发 HTTP 206 流式传输（0% CPU 占用）
-- RFC 3986 特殊字符安全编码与 STRM 毫秒级 302 直连
+- STRM 毫秒级 302 直连云盘顶级 CDN
 """
 import os, sys, sqlite3, mimetypes, urllib.parse, urllib.request, json
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -87,13 +88,18 @@ def get_media_info(guid):
     return None, None
 
 def safe_quote_url(url):
-    parts = urllib.parse.urlsplit(url)
-    quoted_path = urllib.parse.quote(urllib.parse.unquote(parts.path), safe='/:')
-    quoted_query = urllib.parse.quote(urllib.parse.unquote(parts.query), safe='=&/:?%+') if parts.query else ''
-    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, quoted_path, quoted_query, parts.fragment))
+    try:
+        parts = urllib.parse.urlsplit(url)
+        # 仅对 path 中的非 ASCII 字符进行编码，绝不修改 query 字符串！
+        # 很多网盘（天翼云、阿里云、115、S3、OSS）使用 HMAC 预签名链接，query 包含特定编码的 Signature / Token，
+        # 任何对 query 的 unquote 或重新 quote 都会破坏签名 (SignatureDoesNotMatch -> 403 Forbidden)。
+        quoted_path = urllib.parse.quote(urllib.parse.unquote(parts.path), safe='/:@')
+        return urllib.parse.urlunsplit((parts.scheme, parts.netloc, quoted_path, parts.query, parts.fragment))
+    except Exception:
+        return url
 
 def resolve_strm_target(strm_url):
-    is_private_ip = any(strm_url.startswith(f'http://{prefix}') or strm_url.startswith(f'https://{prefix}') 
+    is_private_ip = any(strm_url.startswith(f'http://{prefix}') or strm_url.startswith(f'https://{prefix}')
                         for prefix in ['192.168.', '10.', '127.', 'localhost', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.'])
     if is_private_ip:
         try:
@@ -106,11 +112,11 @@ def resolve_strm_target(strm_url):
                 http_error_307 = http_error_302
                 http_error_308 = http_error_302
             opener = urllib.request.build_opener(NoRedirectHandler)
-            res = opener.open(req, timeout=1.5)
+            res = opener.open(req, timeout=5.0)
             if hasattr(res, 'get'):
                 loc = res.get('Location')
                 if loc:
-                    return loc
+                    return urllib.parse.urljoin(strm_url, loc)
         except Exception:
             pass
     return strm_url
