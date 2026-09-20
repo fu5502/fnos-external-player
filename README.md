@@ -197,6 +197,8 @@ A: 不会。系统内置了自动守护进程 `fn_player_daemon.sh`，每分钟�
 
 ## 📝 更新日志
 
+* **v5.2.1 (2026-09-20)**
+  * 🚀 **STRM 私有中继代理兼容增强**：解决部分通过 OpenList 内部中继代理（不重定向至公网 CDN）的 STRM 视频在 PotPlayer 报“服务器已关闭或地址错误”问题。新增 `proxy_remote_stream` 透明流代理，完美响应 HEAD 探测与 HTTP 206 断点续传，解决 OpenList 默认拒绝 HEAD 请求返回 403 的冲突，且彻底打通外网访问；
 * **v5.2 (2026-09-20)**
   * 🐛 **彻底修复云盘 STRM 预签名直链 403 Forbidden 报错**：排查并消除了 `safe_quote_url` 对 URL query 参数进行二次编解码（unquote -> quote）破坏 HMAC 签名（如 `%3B`、`%3D`、`%2B` 发生突变）的致命缺陷，直连天翼云/阿里云/115 等 OSS 顶级 CDN 完美返回 `HTTP 206 Partial Content` 秒播；
   * ⏱️ **提高预解析容错窗口**：STRM 302 预解析超时阈值放宽至 5.0 秒，避免网盘接口波动导致握手失败；
