@@ -551,7 +551,8 @@
                 txt === '播放' || txt === '继续播放' || txt === '立即播放' ||
                 txt.startsWith('播放') || txt.startsWith('继续播放') || txt.startsWith('立即播放') ||
                 txt.includes('继续播放') || txt.includes('立即播放') ||
-                aria === '播放' || aria === '继续播放'
+                /^第\s*\d+\s*[集期话卷部]/.test(txt) ||
+                aria === '播放' || aria === '继续播放' || aria.includes('播放')
             );
 
             if (isPlayText && txt.length < 30 && !txt.includes('设置') && !txt.includes('列表') && !txt.includes('偏好')) {
