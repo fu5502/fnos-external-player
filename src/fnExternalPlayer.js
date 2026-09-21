@@ -1,7 +1,7 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v5.2.3 (剧集季页穿透与全场景支持版)
- * 1. 剧集季页全支持：电视剧详情页/季页面自动挂载外部播放器，支持带副标题按钮匹配
- * 2. 季对象智能寻轨：季页面点击自动起播该季第 1 集或最近观看单集，044 错误彻底消除
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v5.3.0 (整季自动连播与单集极速直开版)
+ * 1. 电视剧整季连播：在电视剧整季页面点击 PotPlayer/VLC 等直接调起全季 M3U8 播放列表，所有集数一览无余，播完自动换集
+ * 2. 单集与电影秒播：单集或电影页面保持单文件极速直链秒开，零多余网络开销
  * 3. 严格详情页守卫：仅在电影/剧集播放详情页挂载组件，主页、媒体库列表等自动清理不显示
  * 4. 保护云盘预签名参数：直连云盘顶级 CDN，绝不篡改 HMAC 签名参数，0% 转码原画秒播
  * 5. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
@@ -12,7 +12,7 @@
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v5.2.3 (TV Season Supported Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v5.3.0 (Season Playlist Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     const titleCache = {};
 
@@ -36,6 +36,12 @@
         if (pathMatch) return pathMatch[1];
 
         return '';
+    }
+
+    // 判断当前是否处于电视剧季度/主页页面（非单集页面）
+    function isSeasonPage() {
+        const full = (window.location.pathname + window.location.hash).toLowerCase();
+        return full.includes('/tv/season/') || (full.includes('/tv/') && !full.includes('/episode/'));
     }
 
     // 判断当前是否处于电影或电视剧详情/播放页面
@@ -155,12 +161,15 @@
         }, 1000);
     }
 
-    // 同步极速生成直链
+    // 同步极速生成直链（单集与电影生成视频直链，电视剧整季页面生成整季 M3U8 连播列表）
     function getInstantStreamUrl() {
         const guid = extractCurrentGuid();
         if (!guid) return null;
-        const fileName = titleCache[guid] || getDOMMediaTitle();
         const gateway = getStreamGatewayBase();
+        if (isSeasonPage()) {
+            return `${gateway}/fnplaylist/${guid}.m3u8`;
+        }
+        const fileName = titleCache[guid] || getDOMMediaTitle();
         return `${gateway}/fnplay/${guid}/${fileName}`;
     }
 
@@ -306,7 +315,7 @@
                 const streamUrl = getInstantStreamUrl();
                 if (!streamUrl) return;
                 copyToClipboard(streamUrl, () => {
-                    showToast('已复制直链到剪贴板！');
+                    showToast(isSeasonPage() ? '已复制整季 M3U8 播放列表链接！' : '已复制直链到剪贴板！');
                 });
             }
         },
@@ -486,7 +495,7 @@
         `;
 
         const titleLabel = document.createElement('span');
-        titleLabel.innerText = '外部播放:';
+        titleLabel.innerText = isSeasonPage() ? '整季连播:' : '外部播放:';
         titleLabel.style.cssText = `
             color: rgba(255, 255, 255, 0.85);
             font-size: 12px;

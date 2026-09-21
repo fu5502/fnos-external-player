@@ -4,7 +4,7 @@
 
 **为飞牛 OS (fnOS) 飞牛影视 (`trim.media`) 打造的服务端免插件注入增强工具**
 
-[![GitHub Release](https://img.shields.io/badge/Release-v5.2.3-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
+[![GitHub Release](https://img.shields.io/badge/Release-v5.3.0-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-fnOS%20%7C%20Linux%20x86__64-orange.svg?style=flat-square)](https://www.fnnas.com/)
 [![Supported Players](https://img.shields.io/badge/Players-PotPlayer%20%7C%20VLC%20%7C%20IINA%20%7C%20Infuse%20%7C%20MPV-purple.svg?style=flat-square)](#-支持的外部播放器矩阵)
@@ -197,6 +197,9 @@ A: 不会。系统内置了自动守护进程 `fn_player_daemon.sh`，每分钟�
 
 ## 📝 更新日志
 
+* **v5.3.0 (2026-09-21)**
+  * 📑 **电视剧整季自动连播 (全季 M3U8 列表导出)**：在电视剧整季/季度页面（`/v/tv/season/:guid`），点击 PotPlayer / VLC 自动调起整季所有集数播放列表，播放器列表窗口完整呈现全季所有集数并带正规中文集名，单集播完自动无缝连播下一集；而在单集页面（`/v/tv/episode/:guid`）和电影页面保持单文件极速秒播；
+  * ⚡ **零多余网络开销与页面流畅保证**：整季状态识别完全通过同步路由规则毫秒级判定，页面注入 0 额外网络轮询，保证飞牛 Web 页面极致丝滑；
 * **v5.2.3 (2026-09-21)**
   * 🎬 **全场景剧集主页（Season 季页）无缝支持**：前端支持匹配季页带副标题的主按钮（如 `播放 第 1 集`、`继续播放 第 X 集` 等）；网关底层新增 Season 逻辑穿透，季页面点击自动起播该季最近播放集或第 1 集，彻底消除 404 错误并无缝呈现播放器工具栏；
 * **v5.2.1 (2026-09-20)**

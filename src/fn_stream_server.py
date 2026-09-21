@@ -145,6 +145,37 @@ def is_private_host(hostname):
             pass
     return False
 
+def get_season_episodes(season_guid):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT type, parent_guid, title FROM item WHERE guid = ?", (season_guid,))
+        r = c.fetchone()
+        if not r:
+            conn.close()
+            return []
+        itype, parent_guid, ititle = r
+        real_season_guid = season_guid
+        if itype == 'TV':
+            c.execute("SELECT guid FROM item WHERE parent_guid = ? ORDER BY season_number ASC LIMIT 1", (season_guid,))
+            s_row = c.fetchone()
+            if s_row:
+                real_season_guid = s_row[0]
+        elif itype == 'Episode':
+            real_season_guid = parent_guid
+
+        c.execute("""
+            SELECT ep.guid, ep.title, ep.filename, ep.sort_num, ep.episode_number, ep.season_number
+            FROM item ep
+            WHERE ep.parent_guid = ?
+            ORDER BY ep.sort_num ASC, ep.filename ASC, ep.episode_number ASC
+        """, (real_season_guid,))
+        eps = c.fetchall()
+        conn.close()
+        return eps
+    except Exception:
+        return []
+
 def safe_quote_url(url):
     try:
         parts = urllib.parse.urlsplit(url)
@@ -223,13 +254,48 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.wfile.write(resp)
             return
 
-        # 1. 元数据查询接口 (/fnmeta/{guid})
+        # 1. 播放列表生成接口 (/fnplaylist/{guid}.m3u8)
+        is_playlist = any(p == 'fnplaylist' or p.endswith(('.m3u', '.m3u8')) for p in parts)
         is_meta = any(p == 'fnmeta' for p in parts)
         guid = None
         for p in parts:
-            if len(p) in (32, 36) or (len(p) >= 20 and not p.endswith(('.mkv', '.mp4', '.rmvb', '.avi', '.ts', '.flv', '.mov')) and p not in ('fnplay', 'fnmeta', 'v')):
-                guid = p
+            clean_p = p.split('.')[0] if '.' in p else p
+            if len(clean_p) in (32, 36) or (len(clean_p) >= 20 and not p.endswith(('.mkv', '.mp4', '.rmvb', '.avi', '.ts', '.flv', '.mov')) and p not in ('fnplay', 'fnmeta', 'fnplaylist', 'v')):
+                guid = clean_p
                 break
+
+        if is_playlist and guid:
+            episodes = get_season_episodes(guid)
+            if episodes:
+                host_header = self.headers.get('Host') or '127.0.0.1:5668'
+                scheme = self.headers.get('X-Forwarded-Proto')
+                if not scheme:
+                    scheme = 'https' if ('zyweb.top' in host_header or ':8443' in host_header) else 'http'
+                base_origin = f"{scheme}://{host_header}"
+
+                lines = ["#EXTM3U"]
+                for ep_guid, ep_title, ep_filename, snum, ep_num, season_num in episodes:
+                    s_idx = f"S{season_num:02d}E{ep_num:02d}" if (season_num and ep_num and ep_num > 0) else (f"E{ep_num:02d}" if ep_num > 0 else "")
+                    display_name = f"{ep_title} - {s_idx}" if (ep_title and s_idx) else (ep_title or ep_filename or "视频")
+                    clean_display = os.path.splitext(display_name)[0]
+                    encoded_name = urllib.parse.quote(clean_display + ".mkv")
+                    stream_url = f"{base_origin}/fnplay/{ep_guid}/{encoded_name}"
+                    lines.append(f"#EXTINF:-1,{clean_display}")
+                    lines.append(stream_url)
+
+                content = "\n".join(lines).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8')
+                self.send_header('Content-Length', str(len(content)))
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Disposition', 'inline; filename="playlist.m3u8"')
+                self.end_headers()
+                if send_body:
+                    self.wfile.write(content)
+                return
+            else:
+                self.send_error(404, f"No episodes found for playlist: guid={guid}")
+                return
 
         if is_meta and guid:
             file_path, item_guid = get_media_info(guid)
