@@ -61,7 +61,50 @@ def get_media_info(guid):
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        
+
+        # 0. 检查是否为 Season 或 TV（剧集/季页面穿透：自动寻轨该季最近观看集或第 1 集）
+        c.execute("SELECT type, parent_guid FROM item WHERE guid = ?", (guid,))
+        r_type = c.fetchone()
+        if r_type and r_type[0] in ('Season', 'TV'):
+            season_guid = guid
+            if r_type[0] == 'TV':
+                c.execute("SELECT guid FROM item WHERE parent_guid = ? ORDER BY season_number ASC LIMIT 1", (guid,))
+                s_row = c.fetchone()
+                if s_row:
+                    season_guid = s_row[0]
+
+            # 优先查找该季中最近播放过的单集
+            c.execute("""
+                SELECT ep.guid, ep.path
+                FROM item ep
+                JOIN item_user_play p ON ep.guid = p.item_guid
+                WHERE ep.parent_guid = ?
+                ORDER BY p.update_time DESC LIMIT 1
+            """, (season_guid,))
+            ep_row = c.fetchone()
+
+            # 若未播放过，默认取该季第 1 集
+            if not ep_row or not ep_row[1] or not os.path.exists(ep_row[1]):
+                c.execute("""
+                    SELECT guid, path
+                    FROM item
+                    WHERE parent_guid = ?
+                    ORDER BY sort_num ASC, filename ASC, episode_number ASC
+                    LIMIT 1
+                """, (season_guid,))
+                ep_row = c.fetchone()
+
+            if ep_row:
+                target_ep_guid = ep_row[0]
+                if ep_row[1] and os.path.exists(ep_row[1]):
+                    conn.close()
+                    return ep_row[1], target_ep_guid
+                c.execute("SELECT path FROM item_media WHERE item_guid = ? ORDER BY sort_num ASC, size DESC LIMIT 1", (target_ep_guid,))
+                im_row = c.fetchone()
+                if im_row and im_row[0] and os.path.exists(im_row[0]):
+                    conn.close()
+                    return im_row[0], target_ep_guid
+
         # 1. 优先查 item
         c.execute("SELECT path FROM item WHERE guid = ?", (guid,))
         r = c.fetchone()
@@ -189,8 +232,8 @@ class StreamHandler(BaseHTTPRequestHandler):
                 break
 
         if is_meta and guid:
-            file_path, _ = get_media_info(guid)
-            title = get_accurate_title(guid, file_path)
+            file_path, item_guid = get_media_info(guid)
+            title = get_accurate_title(item_guid or guid, file_path)
             resp = json.dumps({"code": 0, "guid": guid, "title": title}).encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -208,7 +251,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                 self.send_error(404, f"Media file not found on disk: guid={guid}")
                 return
 
-            accurate_title = get_accurate_title(guid, file_path)
+            accurate_title = get_accurate_title(item_guid or guid, file_path)
             req_filename = urllib.parse.unquote(parts[-1]) if len(parts) > 1 else ''
 
             # 智能纠偏：如果客户端传入的是 "视频.mkv"、"video.mkv"、"play" 或无文件名

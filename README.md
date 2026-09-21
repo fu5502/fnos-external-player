@@ -4,7 +4,7 @@
 
 **为飞牛 OS (fnOS) 飞牛影视 (`trim.media`) 打造的服务端免插件注入增强工具**
 
-[![GitHub Release](https://img.shields.io/badge/Release-v4.9-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
+[![GitHub Release](https://img.shields.io/badge/Release-v5.2.3-blue.svg?style=flat-square)](https://github.com/fu5502/fnos-external-player/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-fnOS%20%7C%20Linux%20x86__64-orange.svg?style=flat-square)](https://www.fnnas.com/)
 [![Supported Players](https://img.shields.io/badge/Players-PotPlayer%20%7C%20VLC%20%7C%20IINA%20%7C%20Infuse%20%7C%20MPV-purple.svg?style=flat-square)](#-支持的外部播放器矩阵)
@@ -197,6 +197,8 @@ A: 不会。系统内置了自动守护进程 `fn_player_daemon.sh`，每分钟�
 
 ## 📝 更新日志
 
+* **v5.2.3 (2026-09-21)**
+  * 🎬 **全场景剧集主页（Season 季页）无缝支持**：前端支持匹配季页带副标题的主按钮（如 `播放 第 1 集`、`继续播放 第 X 集` 等）；网关底层新增 Season 逻辑穿透，季页面点击自动起播该季最近播放集或第 1 集，彻底消除 404 错误并无缝呈现播放器工具栏；
 * **v5.2.1 (2026-09-20)**
   * 🚀 **STRM 私有中继代理兼容增强**：解决部分通过 OpenList 内部中继代理（不重定向至公网 CDN）的 STRM 视频在 PotPlayer 报“服务器已关闭或地址错误”问题。新增 `proxy_remote_stream` 透明流代理，完美响应 HEAD 探测与 HTTP 206 断点续传，解决 OpenList 默认拒绝 HEAD 请求返回 403 的冲突，且彻底打通外网访问；
 * **v5.2 (2026-09-20)**

@@ -1,16 +1,18 @@
 /**
- * 飞牛影视（fnOS）全能外部播放器调用插件 v5.2 (云盘预签名直链保护与详情页精准守卫版)
- * 1. 严格详情页守卫：仅在电影/剧集播放详情页挂载组件，主页、媒体库列表等自动清理不显示
- * 2. 保护云盘预签名参数：直连云盘顶级 CDN，绝不篡改 HMAC 签名参数，0% 转码原画秒播
- * 3. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
- * 4. 服务端智能 302 重定向纠偏：若调起时片名未就绪，服务端即刻 302 重定向至真实中文片名
- * 5. 紧凑单行防换行排版：尺寸缩小适配各种分辨率，禁止换行，视觉高度与按钮对齐
- * 6. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
+ * 飞牛影视（fnOS）全能外部播放器调用插件 v5.2.3 (剧集季页穿透与全场景支持版)
+ * 1. 剧集季页全支持：电视剧详情页/季页面自动挂载外部播放器，支持带副标题按钮匹配
+ * 2. 季对象智能寻轨：季页面点击自动起播该季第 1 集或最近观看单集，044 错误彻底消除
+ * 3. 严格详情页守卫：仅在电影/剧集播放详情页挂载组件，主页、媒体库列表等自动清理不显示
+ * 4. 保护云盘预签名参数：直连云盘顶级 CDN，绝不篡改 HMAC 签名参数，0% 转码原画秒播
+ * 5. 官方 API 本地免流预取：通过 window.__ug.item.info 毫秒级提取真实中文片名与文件名
+ * 6. 服务端智能 302 重定向纠偏：若调起时片名未就绪，服务端即刻 302 重定向至真实中文片名
+ * 7. 紧凑单行防换行排版：尺寸缩小适配各种分辨率，禁止换行，视觉高度与按钮对齐
+ * 8. Lucky 反代 / IPv6 / 局域网全自适应：外网自动复用当前域名与 HTTPS 端口，局域网直连 5668 网关
  */
 (function () {
     'use strict';
 
-    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v5.2 (Cloud Presigned URL Safe Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
+    console.log('%c[fnExternalPlayer] 飞牛影视外部播放器插件 v5.2.3 (TV Season Supported Edition) 运行中...', 'color: #00A1D6; font-weight: bold; font-size: 14px;');
 
     const titleCache = {};
 
@@ -538,12 +540,21 @@
     }
 
     function findTargetContainer() {
-        // 1. 优先寻找影视详情页主播放按钮组（“播放”、“继续播放”、“立即播放”）
+        // 1. 优先寻找影视详情页主播放按钮组（支持电影/单集主按钮，以及剧集季页面带副标题的“播放 第 1 集”等按钮）
         const buttons = Array.from(document.querySelectorAll('button, [role="button"], .semi-button, a'));
         for (const btn of buttons) {
             if (btn.id && btn.id.startsWith('fn-btn-')) continue;
             const txt = (btn.innerText || btn.textContent || '').trim();
-            if ((txt === '播放' || txt === '继续播放' || txt === '立即播放' || txt.includes('继续播放') || txt.includes('立即播放')) && txt.length < 15) {
+            const aria = (btn.getAttribute('aria-label') || '').trim();
+
+            const isPlayText = (
+                txt === '播放' || txt === '继续播放' || txt === '立即播放' ||
+                txt.startsWith('播放') || txt.startsWith('继续播放') || txt.startsWith('立即播放') ||
+                txt.includes('继续播放') || txt.includes('立即播放') ||
+                aria === '播放' || aria === '继续播放'
+            );
+
+            if (isPlayText && txt.length < 30 && !txt.includes('设置') && !txt.includes('列表') && !txt.includes('偏好')) {
                 let parent = btn.parentElement;
                 while (parent && parent.children.length === 1 && parent !== document.body) {
                     parent = parent.parentElement;
